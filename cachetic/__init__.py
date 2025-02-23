@@ -124,14 +124,14 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
         for item in data_json:
 
             try:
-                output.append(self.object_type.model_validate_json(item))
+                output.append(self.object_type.model_validate(item))
 
             except pydantic.ValidationError:
                 _data_str = json.dumps(item, ensure_ascii=False, default=str)
                 _display_data_str = (
                     _data_str[:1000] + "..." if len(_data_str) > 1000 else _data_str
                 )
-                logger.warning(f"Invalid JSON for '{_key}': {_display_data_str}")
+                logger.error(f"Invalid JSON for '{_key}': {_display_data_str}")
 
         return output
 
@@ -148,7 +148,15 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
         )
 
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
-        self.cache.set(_key, value.model_dump_json(), ex)
+        self.cache.set(
+            _key,
+            (
+                json.dumps(value, default=str)
+                if isinstance(value, typing.Dict)  # type: ignore
+                else value.model_dump_json()
+            ),
+            ex,
+        )
 
     def set_objects(
         self,
@@ -159,6 +167,15 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
         _key = f"{self.cache_prefix}:{key}" if self.cache_prefix else key
 
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
-        self.cache.set(
-            _key, json.dumps([json.loads(v.model_dump_json()) for v in values]), ex
-        )
+
+        _items: typing.List[typing.Dict] = []
+        for v in values:
+            _items.append(
+                json.loads(
+                    json.dumps(v, default=str)
+                    if isinstance(v, typing.Dict)
+                    else v.model_dump_json()
+                )
+            )
+
+        self.cache.set(_key, json.dumps(_items), ex)
