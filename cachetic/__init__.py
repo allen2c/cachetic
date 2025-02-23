@@ -102,6 +102,17 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
 
         return self.object_type.model_validate_json(data)  # type: ignore
 
+    def get_or_raise(
+        self,
+        key: typing.Text,
+        *,
+        with_prefix: bool = True,
+    ) -> PydanticModelBindable:
+        out = self.get(key, with_prefix=with_prefix)
+        if out is None:
+            raise CacheNotFoundError(f"Cache not found for key '{key}'")
+        return out
+
     def get_objects(
         self,
         key: typing.Text,
@@ -134,6 +145,17 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
                 logger.error(f"Invalid JSON for '{_key}': {_display_data_str}")
 
         return output
+
+    def get_objects_or_raise(
+        self,
+        key: typing.Text,
+        *,
+        with_prefix: bool = True,
+    ) -> typing.List[PydanticModelBindable]:
+        out = self.get_objects(key, with_prefix=with_prefix)
+        if out is None:
+            raise CacheNotFoundError(f"Cache not found for key '{key}'")
+        return out
 
     def set(
         self,
