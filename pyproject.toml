@@ -6,7 +6,12 @@ authors = [{ name = "Allen Chou", email = "f1470891079@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.11,<4"
-dependencies = ["diskcache (>=5,<6)", "redis (>=5,<6)"]
+dependencies = [
+  "diskcache (>=5,<6)",
+  "redis (>=5,<6)",
+  "pydantic (>=2,<3)",
+  "pydantic-settings (>=2,<3)",
+]
 
 [tool.poetry.group.dev.dependencies]
 codepress = "^0.1.1"
