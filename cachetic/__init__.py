@@ -1,3 +1,4 @@
+import json
 import logging
 import pathlib
 import typing
@@ -17,6 +18,10 @@ __version__ = pathlib.Path(__file__).parent.joinpath("VERSION").read_text().stri
 LOGGER_NAME = "cachetic"
 
 logger = logging.getLogger(LOGGER_NAME)
+
+
+class CacheNotFoundError(Exception):
+    pass
 
 
 class CacheticDefaultModel(pydantic.BaseModel):
@@ -97,6 +102,39 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
 
         return self.object_type.model_validate_json(data)  # type: ignore
 
+    def get_objects(
+        self,
+        key: typing.Text,
+        *,
+        with_prefix: bool = True,
+    ) -> typing.List[PydanticModelBindable]:
+        _key = (
+            f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
+        )
+
+        logger.debug(f"Getting cache for '{_key}'")
+        data = self.cache.get(_key)
+
+        if data is None:
+            return []
+
+        data_json = json.loads(data)  # type: ignore
+
+        output: typing.List[PydanticModelBindable] = []
+        for item in data_json:
+
+            try:
+                output.append(self.object_type.model_validate_json(item))
+
+            except pydantic.ValidationError:
+                _data_str = json.dumps(item, ensure_ascii=False, default=str)
+                _display_data_str = (
+                    _data_str[:1000] + "..." if len(_data_str) > 1000 else _data_str
+                )
+                logger.warning(f"Invalid JSON for '{_key}': {_display_data_str}")
+
+        return output
+
     def set(
         self,
         key: typing.Text,
@@ -111,3 +149,16 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
 
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
         self.cache.set(_key, value.model_dump_json(), ex)
+
+    def set_objects(
+        self,
+        key: typing.Text,
+        values: typing.List[PydanticModelBindable],
+        ex: typing.Optional[int] = None,
+    ) -> None:
+        _key = f"{self.cache_prefix}:{key}" if self.cache_prefix else key
+
+        logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
+        self.cache.set(
+            _key, json.dumps([json.loads(v.model_dump_json()) for v in values]), ex
+        )
