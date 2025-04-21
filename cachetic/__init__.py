@@ -43,7 +43,7 @@ class Cachetic(
 ):
     model_config = pydantic_settings.SettingsConfigDict(arbitrary_types_allowed=True)
 
-    object_type: typing.Type[SUPPORTED_OBJECT_TYPE_VAR] = pydantic.Field(
+    object_type: typing.Any = pydantic.Field(
         default=typing.cast(typing.Type[SUPPORTED_OBJECT_TYPE_VAR], object)
     )
 
@@ -130,7 +130,12 @@ class Cachetic(
         elif self.object_type is bytes:
             return data  # type: ignore
         elif self.object_type is str:
-            return data.decode("utf-8")  # type: ignore
+            # Data retrieved should be bytes, decode to string
+            if isinstance(data, bytes):
+                return data.decode("utf-8")  # type: ignore
+            elif isinstance(data, str):
+                return data  # type: ignore
+            raise TypeError(f"Expected bytes or str for string cache, got {type(data)}")
         elif self.object_type is int:
             return int(data)  # type: ignore
         elif self.object_type is float:
@@ -172,6 +177,8 @@ class Cachetic(
         )
 
         ex = ex if ex is not None else self.cache_ttl if self.cache_ttl > 0 else None
+        if ex == 0:
+            return None  # No need to set cache
 
         # Dump value
         if hasattr(self.object_type, "model_dump_json") or isinstance(
@@ -183,7 +190,8 @@ class Cachetic(
         elif self.object_type is bytes:
             _value = value  # type: ignore
         elif self.object_type is str:
-            _value = value  # type: ignore
+            # Ensure value is encoded to bytes before setting
+            _value = value.encode("utf-8")  # type: ignore
         elif self.object_type is int:
             _value = value  # type: ignore
         elif self.object_type is float:
