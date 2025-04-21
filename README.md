@@ -1,6 +1,17 @@
 # cachetic
 
-A simple cache library that integrates [Pydantic](https://docs.pydantic.dev/) models with either a local filesystem cache ([diskcache](https://pypi.org/project/diskcache/)) or a Redis cache. Designed for Python 3.11+.
+[![PyPI version](https://img.shields.io/pypi/v/cachetic.svg)](https://pypi.org/project/cachetic/)
+[![Python Version](https://img.shields.io/pypi/pyversions/cachetic.svg)](https://pypi.org/project/cachetic/)
+[![License](https://img.shields.io/pypi/l/cachetic.svg)](https://opensource.org/licenses/MIT)
+
+Simple cache with pydantic[cite: 12]. This library integrates [Pydantic](https://docs.pydantic.dev/) models with either a local filesystem cache ([diskcache](https://pypi.org/project/diskcache/)) or a Redis cache[cite: 13]. Designed for Python 3.11+[cite: 12, 13].
+
+## Features
+
+* **Pydantic Integration**: Seamlessly cache Pydantic `BaseModel` instances or use `TypeAdapter` for complex types[cite: 71, 72, 110].
+* **Flexible Backends**: Supports local filesystem caching via `diskcache` or distributed caching with Redis[cite: 13, 98, 102].
+* **Type Support**: Caches various Python types including primitives (`str`, `int`, `bytes`, `float`, `bool`), collections (`list`, `dict`), and arbitrary pickleable `object`s[cite: 67, 68, 69, 70, 73, 92].
+* **Configurable**: Set cache TTL, key prefixes, and backend location easily[cite: 94, 97].
 
 ## Installation
 
@@ -8,7 +19,7 @@ Install via **pip**:
 
 ```bash
 pip install cachetic
-```
+````
 
 Or via **Poetry**:
 
@@ -28,81 +39,85 @@ class Person(BaseModel):
     name: str
     age: int
 
-# Create a Cachetic instance that uses diskcache locally
-local_cache = Cachetic[Person](
-    object_type=Person,
-    cache_url=None,   # No Redis URL -> use local disk cache
-    cache_dir=".my-cache",  # Directory for local cache files
-    cache_prefix="myprefix"  # Optional string to prefix all keys
-)
+# Create a Cachetic instance using diskcache
+# Defaults to './.cache' if cache_url is omitted
+cache = Cachetic[Person](object_type=Person, cache_prefix="myapp")
 
-# Store a model
+# Store a model instance
 alice = Person(name="Alice", age=30)
-local_cache.set("user:1", alice)
+cache.set("user:1", alice)
 
-# Retrieve the model
-person = local_cache.get("user:1")
-if person:
-    print(person.name, person.age)  # "Alice", 30
+# Retrieve the model instance
+retrieved_person = cache.get("user:1")
+if retrieved_person:
+    print(f"Retrieved: {retrieved_person.name}, Age: {retrieved_person.age}") # Output: Retrieved: Alice, Age: 30 [cite: 14]
 ```
 
 ### Using Redis
 
-If you have a Redis server running, you can provide the URL to Cachetic:
+Provide a Redis connection URL to use Redis as the backend:
 
 ```python
+# Assumes Redis is running on redis://localhost:6379/0
 redis_cache = Cachetic[Person](
     object_type=Person,
-    cache_url="redis://localhost:6379/0",  # Adjust as needed
-    cache_prefix="myprefix"
+    cache_url="redis://localhost:6379/0", # Your Redis URL [cite: 79]
+    cache_prefix="myapp_redis"
 )
 
 # Store and retrieve
-redis_cache.set("user:2", Person(name="Bob", age=40))
-bob = redis_cache.get("user:2")
-if bob:
-    print(bob.name, bob.age)  # "Bob", 40
+bob = Person(name="Bob", age=40)
+redis_cache.set("user:2", bob)
+retrieved_bob = redis_cache.get("user:2")
+if retrieved_bob:
+    print(f"Retrieved from Redis: {retrieved_bob.name}") # Output: Retrieved from Redis: Bob [cite: 14]
 ```
 
-### Storing and Retrieving Lists of Models
+### Caching Other Types (e.g., a List of Dicts)
 
 ```python
-people_list = [
-    Person(name="Charlie", age=25),
-    Person(name="Diana", age=32),
-]
+from typing import List, Dict
 
-local_cache.set_objects("group:1", people_list)
-retrieved_people = local_cache.get_objects("group:1")
+# Use TypeAdapter for complex non-BaseModel types
+DictList = List[Dict[str, str]]
+list_cache = Cachetic[DictList](object_type=DictList) # Or use pydantic.TypeAdapter(DictList)
 
-for p in retrieved_people:
-    print(p.name, p.age)
-```
+data_list = [{"item": "apple"}, {"item": "banana"}]
+list_cache.set("items", data_list)
 
-### Fallback (No Explicit Model)
-
-If you don’t provide an `object_type`, Cachetic defaults to a permissive [Pydantic model](cachetic/__init__.py) that allows extra keys. This can be handy if you want quick-and-dirty caching without strict validation:
-
-```python
-# Fallback usage (stores any JSON-serializable data)
-generic_cache = Cachetic()
-generic_cache.set("generic_key", {"arbitrary": "data"})
-data = generic_cache.get("generic_key")
-print(data.arbitrary)  # 'data'
+retrieved_list = list_cache.get("items")
+if retrieved_list:
+    print(f"Retrieved list: {retrieved_list}") # Output: Retrieved list: [{'item': 'apple'}, {'item': 'banana'}]
 ```
 
 ## Configuration
 
-- **`cache_url`**: The URL for your Redis server (`redis://...`). If omitted or `None`, Cachetic uses diskcache locally.
-- **`cache_dir`**: Directory path for diskcache files (default: `./.cache`).
-- **`cache_prefix`**: Optional string prefix applied to every key in the cache.
-- **`cache_ttl`**: Default TTL (time-to-live). Set to `-1` for no expiration.
+`Cachetic` can be configured via environment variables (with `CACHETIC_` prefix) or directly during instantiation. Key parameters include:
 
-## Testing
+* **`object_type`**: The type of object being cached (e.g., `Person`, `list`, `bytes`, `pydantic.TypeAdapter(...)`). Defaults to `object` for general pickling[cite: 93].
+* **`cache_url`**: The Redis connection URL (`redis://...`) or local directory path for `diskcache`[cite: 93]. Defaults to `./.cache`[cite: 93].
+* **`cache_ttl`**: Default time-to-live for cache entries in seconds[cite: 94].
+    * `-1` (default): No expiration[cite: 95].
+    * `0`: Disable caching [writes have no effect](cite: 96, 116).
+    * `>0`: Expire after N seconds[cite: 97].
+* **`cache_prefix`**: A string prefix added to all cache keys[cite: 97].
 
-After cloning the repository, install development dependencies and run the tests:
+## Development
 
-```bash
-poetry install --all-extras --all-groups
-make test
-```
+1. **Clone the repository.**
+2. **Install dependencies** (including development tools):
+    ```bash
+    poetry install --all-extras # Or use 'make install-all' [cite: 11]
+    ```
+3. **Run tests**:
+    ```bash
+    make test # Uses pytest [cite: 11, 19]
+    ```
+4. **Format code**:
+    ```bash
+    make format-all # Runs isort and black [cite: 9, 10, 11]
+    ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details[cite: 1, 12].
