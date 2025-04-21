@@ -91,22 +91,6 @@ def test_local_get_nonexistent_key_returns_none(local_cache: Cachetic[Person]):
     assert result is None
 
 
-def test_local_set_and_get_objects(local_cache: Cachetic[Person]):
-    """
-    Tests storing and retrieving a list of Pydantic objects via local diskcache.
-    """
-    people = [
-        Person(name="Alice", age=30),
-        Person(name="Bob", age=40),
-    ]
-    local_cache.set_objects("people", people)
-
-    results = local_cache.get_objects("people")
-    assert len(results) == 2
-    assert results[0].name == "Alice"
-    assert results[1].name == "Bob"
-
-
 def test_local_prefix_usage(local_cache: Cachetic[Person]):
     """
     Verifies that the prefix is applied to the internal key,
@@ -154,24 +138,6 @@ def test_redis_set_and_get(redis_cache: Cachetic[Person]):
 
 
 @pytest.mark.skipif(not is_redis_available(), reason="Redis not available.")
-def test_redis_set_and_get_objects(redis_cache: Cachetic[Person]):
-    """
-    Tests storing a list of Pydantic objects in Redis,
-    then retrieving them.
-    """
-    people = [
-        Person(name="Frank", age=33),
-        Person(name="Georgia", age=44),
-    ]
-    redis_cache.set_objects("people:list", people)
-
-    results = redis_cache.get_objects("people:list")
-    assert len(results) == 2
-    assert results[0].name == "Frank"
-    assert results[1].name == "Georgia"
-
-
-@pytest.mark.skipif(not is_redis_available(), reason="Redis not available.")
 def test_redis_prefix_usage(redis_cache: Cachetic[Person]):
     """
     Verifies that the prefix is applied for Redis usage as well,
@@ -197,27 +163,7 @@ def test_object_type_fallback():
     # So we check that it's not None and is a Pydantic object with data.
     assert result is not None
     # Because it's the default model, you can do e.g.:
-    assert getattr(result, "some") == "dictionary data"
-
-
-def test_invalid_json_logging(caplog):
-    """
-    We can test that if the stored JSON is invalid or doesn't match
-    the model, a warning is logged and we skip the invalid items.
-    This scenario can be forced by direct injection or mocking.
-    """
-    c = Cachetic[Person](
-        object_type=Person, cache_url=None, cache_dir=".test-cache-bad"
-    )
-    # Manually insert invalid JSON into the underlying local cache:
-    c.local_cache.set("bad-data", '[{"name": "NoAge"}]')
-    results = c.get_objects("bad-data")
-    # Because that JSON is incomplete (no "age"), it fails validation
-    # for Person, so it logs a warning and yields an empty list.
-    assert len(results) == 0
-
-    # Confirm a warning was logged.
-    assert any("Invalid JSON for 'bad-data'" in rec.message for rec in caplog.records)
+    assert result["some"] == "dictionary data"  # type: ignore
 
 
 def teardown_module(module):

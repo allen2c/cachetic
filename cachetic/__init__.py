@@ -1,6 +1,7 @@
 import json
 import logging
 import pathlib
+import pickle
 import typing
 
 import diskcache
@@ -8,9 +9,22 @@ import pydantic
 import pydantic_settings
 import redis
 
-PydanticModelBindable = typing.TypeVar(
-    "PydanticModelBindable", bound=pydantic.BaseModel
+SUPPORTED_OBJECT_TYPE_VAR = typing.TypeVar(
+    "SUPPORTED_OBJECT_TYPE_VAR",
+    bound=typing.Union[
+        bytes,
+        str,
+        int,
+        float,
+        bool,
+        list,
+        dict,
+        pydantic.BaseModel,
+        pydantic.TypeAdapter,
+        object,
+    ],
 )
+
 
 __version__ = pathlib.Path(__file__).parent.joinpath("VERSION").read_text().strip()
 
@@ -24,15 +38,13 @@ class CacheNotFoundError(Exception):
     pass
 
 
-class CacheticDefaultModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(extra="allow")
-
-
-class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBindable]):
+class Cachetic(
+    pydantic_settings.BaseSettings, typing.Generic[SUPPORTED_OBJECT_TYPE_VAR]
+):
     model_config = pydantic_settings.SettingsConfigDict(arbitrary_types_allowed=True)
 
-    object_type: typing.Type[PydanticModelBindable] = pydantic.Field(
-        default=typing.cast(typing.Type[PydanticModelBindable], CacheticDefaultModel)
+    object_type: typing.Type[SUPPORTED_OBJECT_TYPE_VAR] = pydantic.Field(
+        default=typing.cast(typing.Type[SUPPORTED_OBJECT_TYPE_VAR], object)
     )
 
     cache_url: typing.Optional[pydantic.SecretStr] = pydantic.Field(
@@ -45,7 +57,12 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
     )
     cache_ttl: int = pydantic.Field(
         default=-1,
-        description="The TTL of the cache. Set to -1 to disable TTL.",
+        description=(
+            "Cache time-to-live (seconds). "
+            "-1: no expiration. "
+            "0: disable cache. "
+            ">0: expire after N seconds."
+        ),
     )
     cache_prefix: str = pydantic.Field(
         default="",
@@ -89,7 +106,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
         key: typing.Text,
         *,
         with_prefix: bool = True,
-    ) -> typing.Optional[PydanticModelBindable]:
+    ) -> typing.Optional[SUPPORTED_OBJECT_TYPE_VAR]:
         _key = (
             f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
         )
@@ -100,59 +117,44 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
         if data is None:
             return None
 
-        return self.object_type.model_validate_json(data)  # type: ignore
+        # Output is a Pydantic model
+        if hasattr(self.object_type, "model_validate_json") or isinstance(
+            self.object_type, pydantic.BaseModel
+        ):
+            return self.object_type.model_validate_json(data)  # type: ignore
+        # Output is a pydantic TypeAdapter
+        elif isinstance(self.object_type, pydantic.TypeAdapter):
+            return self.object_type.validate_json(data)  # type: ignore
+
+        # Output is a primitive type
+        elif self.object_type is bytes:
+            return data  # type: ignore
+        elif self.object_type is str:
+            return data.decode("utf-8")  # type: ignore
+        elif self.object_type is int:
+            return int(data)  # type: ignore
+        elif self.object_type is float:
+            return float(data)  # type: ignore
+        elif self.object_type is bool:
+            return False if data == b"0" else True  # type: ignore
+        elif self.object_type is list:
+            return json.loads(data)  # type: ignore
+        elif self.object_type is dict:
+            return json.loads(data)  # type: ignore
+
+        # Output is a python object
+        elif self.object_type is object:
+            return pickle.loads(data)  # type: ignore
+
+        raise ValueError(f"Unsupported object type: {self.object_type}")
 
     def get_or_raise(
         self,
         key: typing.Text,
         *,
         with_prefix: bool = True,
-    ) -> PydanticModelBindable:
+    ) -> SUPPORTED_OBJECT_TYPE_VAR:
         out = self.get(key, with_prefix=with_prefix)
-        if out is None:
-            raise CacheNotFoundError(f"Cache not found for key '{key}'")
-        return out
-
-    def get_objects(
-        self,
-        key: typing.Text,
-        *,
-        with_prefix: bool = True,
-    ) -> typing.List[PydanticModelBindable]:
-        _key = (
-            f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
-        )
-
-        logger.debug(f"Getting cache for '{_key}'")
-        data = self.cache.get(_key)
-
-        if data is None:
-            return []
-
-        data_json = json.loads(data)  # type: ignore
-
-        output: typing.List[PydanticModelBindable] = []
-        for item in data_json:
-
-            try:
-                output.append(self.object_type.model_validate(item))
-
-            except pydantic.ValidationError:
-                _data_str = json.dumps(item, ensure_ascii=False, default=str)
-                _display_data_str = (
-                    _data_str[:1000] + "..." if len(_data_str) > 1000 else _data_str
-                )
-                logger.error(f"Invalid JSON for '{_key}': {_display_data_str}")
-
-        return output
-
-    def get_objects_or_raise(
-        self,
-        key: typing.Text,
-        *,
-        with_prefix: bool = True,
-    ) -> typing.List[PydanticModelBindable]:
-        out = self.get_objects(key, with_prefix=with_prefix)
         if out is None:
             raise CacheNotFoundError(f"Cache not found for key '{key}'")
         return out
@@ -160,7 +162,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
     def set(
         self,
         key: typing.Text,
-        value: PydanticModelBindable,
+        value: SUPPORTED_OBJECT_TYPE_VAR,
         ex: typing.Optional[int] = None,
         *,
         with_prefix: bool = True,
@@ -169,35 +171,33 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[PydanticModelBinda
             f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
         )
 
+        ex = ex if ex is not None else self.cache_ttl if self.cache_ttl > 0 else None
+
+        # Dump value
+        if hasattr(self.object_type, "model_dump_json") or isinstance(
+            self.object_type, pydantic.BaseModel
+        ):
+            _value = self.object_type.model_dump_json(value)  # type: ignore
+        elif isinstance(self.object_type, pydantic.TypeAdapter):
+            _value = self.object_type.dump_json(value)  # type: ignore
+        elif self.object_type is bytes:
+            _value = value  # type: ignore
+        elif self.object_type is str:
+            _value = value  # type: ignore
+        elif self.object_type is int:
+            _value = value  # type: ignore
+        elif self.object_type is float:
+            _value = value  # type: ignore
+        elif self.object_type is bool:
+            _value = b"1" if value else b"0"
+        elif self.object_type is list:
+            _value = json.dumps(value, default=str)  # type: ignore
+        elif self.object_type is dict:
+            _value = json.dumps(value, default=str)  # type: ignore
+        elif self.object_type is object:
+            _value = pickle.dumps(value)  # type: ignore
+        else:
+            raise ValueError(f"Unsupported object type: {self.object_type}")
+
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
-        self.cache.set(
-            _key,
-            (
-                json.dumps(value, default=str)
-                if isinstance(value, typing.Dict)  # type: ignore
-                else value.model_dump_json()
-            ),
-            ex,
-        )
-
-    def set_objects(
-        self,
-        key: typing.Text,
-        values: typing.List[PydanticModelBindable],
-        ex: typing.Optional[int] = None,
-    ) -> None:
-        _key = f"{self.cache_prefix}:{key}" if self.cache_prefix else key
-
-        logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
-
-        _items: typing.List[typing.Dict] = []
-        for v in values:
-            _items.append(
-                json.loads(
-                    json.dumps(v, default=str)
-                    if isinstance(v, typing.Dict)
-                    else v.model_dump_json()
-                )
-            )
-
-        self.cache.set(_key, json.dumps(_items), ex)
+        self.cache.set(_key, _value, ex)  # type: ignore
