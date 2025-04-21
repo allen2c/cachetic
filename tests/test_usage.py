@@ -43,8 +43,7 @@ def local_cache():
     # Use a temporary directory for local caching to ensure it's clean each test
     return Cachetic[Person](
         object_type=Person,
-        cache_url=None,  # means local diskcache only
-        cache_dir=".test-cache",
+        cache_url=".test-cache",  # means local diskcache only
         cache_prefix="testlocal",
         cache_ttl=-1,
     )
@@ -156,7 +155,7 @@ def test_object_type_fallback():
     it uses CacheticDefaultModel (which is basically 'allow' mode).
     """
     # If object_type isn't provided, it defaults to CacheticDefaultModel
-    c = Cachetic(cache_url=None, cache_dir=".test-cache-fallback")
+    c = Cachetic(cache_url=".test-cache-fallback")
     c.set("fallback_key", {"some": "dictionary data"})  # type: ignore
     result = c.get("fallback_key")
     # The default is CacheticDefaultModel, which can allow extra keys

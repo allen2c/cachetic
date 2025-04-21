@@ -34,7 +34,7 @@ PeopleAdapter = pydantic.TypeAdapter(typing.List[Person])
 def test_bytes():
     """Tests caching bytes."""
     # Use a unique cache dir per test to avoid conflicts
-    cache = Cachetic[bytes](object_type=bytes, cache_dir="./.cache/.test-cache-bytes")
+    cache = Cachetic[bytes](object_type=bytes, cache_url="./.cache/.test-cache-bytes")
     key = "test_bytes"
     value = b"some bytes"
     cache.set(key, value)
@@ -45,7 +45,7 @@ def test_bytes():
 
 def test_str():
     """Tests caching strings."""
-    cache = Cachetic[str](object_type=str, cache_dir="./.cache/.test-cache-str")
+    cache = Cachetic[str](object_type=str, cache_url="./.cache/.test-cache-str")
     key = "test_str"
     value = "some string"
     cache.set(key, value)
@@ -56,7 +56,7 @@ def test_str():
 
 def test_int():
     """Tests caching integers."""
-    cache = Cachetic[int](object_type=int, cache_dir="./.cache/.test-cache-int")
+    cache = Cachetic[int](object_type=int, cache_url="./.cache/.test-cache-int")
     key = "test_int"
     value = 12345
     cache.set(key, value)
@@ -67,7 +67,7 @@ def test_int():
 
 def test_float():
     """Tests caching floats."""
-    cache = Cachetic[float](object_type=float, cache_dir="./.cache/.test-cache-float")
+    cache = Cachetic[float](object_type=float, cache_url="./.cache/.test-cache-float")
     key = "test_float"
     value = 123.45
     cache.set(key, value)
@@ -78,7 +78,7 @@ def test_float():
 
 def test_bool():
     """Tests caching booleans."""
-    cache = Cachetic[bool](object_type=bool, cache_dir="./.cache/.test-cache-bool")
+    cache = Cachetic[bool](object_type=bool, cache_url="./.cache/.test-cache-bool")
     key_true = "test_bool_true"
     key_false = "test_bool_false"
     cache.set(key_true, True)
@@ -89,7 +89,7 @@ def test_bool():
 
 def test_list():
     """Tests caching lists (via JSON)."""
-    cache = Cachetic[list](object_type=list, cache_dir="./.cache/.test-cache-list")
+    cache = Cachetic[list](object_type=list, cache_url="./.cache/.test-cache-list")
     key = "test_list"
     value = [1, "two", 3.0, False, {"nested": "dict"}]
     cache.set(key, value)
@@ -100,7 +100,7 @@ def test_list():
 
 def test_dict():
     """Tests caching dictionaries (via JSON)."""
-    cache = Cachetic[dict](object_type=dict, cache_dir="./.cache/.test-cache-dict")
+    cache = Cachetic[dict](object_type=dict, cache_url="./.cache/.test-cache-dict")
     key = "test_dict"
     value = {"a": 1, "b": "string", "c": [1, 2], "d": True}
     cache.set(key, value)
@@ -112,7 +112,7 @@ def test_dict():
 def test_pydantic_base_model():
     """Tests caching Pydantic BaseModel instances."""
     cache = Cachetic[Person](
-        object_type=Person, cache_dir="./.cache/.test-cache-pydantic-model"
+        object_type=Person, cache_url="./.cache/.test-cache-pydantic-model"
     )
     key = "test_pydantic_model"
     value = Person(name="Alice", age=30)
@@ -129,7 +129,7 @@ def test_pydantic_type_adapter():
     # Initialize without generic type when object_type is a TypeAdapter instance
     cache = Cachetic(
         object_type=PeopleAdapter,  # type: ignore
-        cache_dir="./.cache/.test-cache-pydantic-adapter",
+        cache_url="./.cache/.test-cache-pydantic-adapter",
     )
     key = "test_pydantic_adapter"
     value = [Person(name="Bob", age=40), Person(name="Charlie", age=25)]
@@ -146,7 +146,7 @@ def test_pydantic_type_adapter():
 def test_object():
     """Tests caching arbitrary pickleable Python objects."""
     cache = Cachetic[object](
-        object_type=object, cache_dir="./.cache/.test-cache-object"
+        object_type=object, cache_url="./.cache/.test-cache-object"
     )
     key = "test_object"
     value = SimpleObject(x="data")  # Use module-level class
@@ -160,7 +160,7 @@ def test_object():
 def test_unsupported_set():
     """Tests that attempting to cache an unpickleable object raises an error."""
     cache = Cachetic[object](
-        object_type=object, cache_dir="./.cache/.test-cache-unsupported-set"
+        object_type=object, cache_url="./.cache/.test-cache-unsupported-set"
     )
     key = "test_unsupported_set"
     value = RLock()  # RLock instances are not pickleable
@@ -174,13 +174,13 @@ def test_unsupported_set():
 def test_unsupported_get():
     """Tests that getting data with an unsupported object_type raises ValueError."""
     cache_setter = Cachetic[str](
-        object_type=str, cache_dir="./.cache/.test-cache-unsupported-get"
+        object_type=str, cache_url="./.cache/.test-cache-unsupported-get"
     )
     key = "test_unsupported_get"
     cache_setter.set(key, "some data")
 
     # Create a new instance to get the data
-    cache_getter = Cachetic(cache_dir="./.cache/.test-cache-unsupported-get")
+    cache_getter = Cachetic(cache_url="./.cache/.test-cache-unsupported-get")
     # Manually set an invalid object_type not handled in the 'get' method
     cache_getter.object_type = RLock  # type: ignore
 

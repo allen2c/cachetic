@@ -3,11 +3,13 @@ import logging
 import pathlib
 import pickle
 import typing
+import urllib.parse
 
 import diskcache
 import pydantic
 import pydantic_settings
 import redis
+import redis.exceptions
 
 SUPPORTED_OBJECT_TYPE_VAR = typing.TypeVar(
     "SUPPORTED_OBJECT_TYPE_VAR",
@@ -47,13 +49,11 @@ class Cachetic(
         default=typing.cast(typing.Type[SUPPORTED_OBJECT_TYPE_VAR], object)
     )
 
-    cache_url: typing.Optional[pydantic.SecretStr] = pydantic.Field(
-        default=None,
-        description="The URL of the cache server.",
-    )
-    cache_dir: typing.Text = pydantic.Field(
-        default=str(pathlib.Path("./.cache").resolve()),
-        description="The directory to store the cache files.",
+    cache_url: typing.Text = pydantic.Field(
+        default="./.cache",
+        description=(
+            "The URL of the cache server or the directory to store the cache files."
+        ),
     )
     cache_ttl: int = pydantic.Field(
         default=-1,
@@ -70,36 +70,86 @@ class Cachetic(
     )
 
     # Private attributes
-    _remote_cache: typing.Optional[redis.Redis] = pydantic.PrivateAttr(default=None)
-    _local_cache: typing.Optional[diskcache.Cache] = pydantic.PrivateAttr(default=None)
+    _cache: typing.Optional[typing.Union[redis.Redis, diskcache.Cache]] = (
+        pydantic.PrivateAttr(default=None)
+    )
 
     @property
-    def remote_cache(self) -> typing.Union[redis.Redis, diskcache.Cache]:
-        if self._remote_cache is None:
+    def is_redis_cache(self) -> bool:
+        parsed_path = urllib.parse.urlparse(self.cache_url)
+        if parsed_path.scheme == "redis":
+            return True
+        return False
 
-            if self.cache_url is None:
-                raise ValueError("The 'cache_url' is required for remote cache.")
-
-            logger.debug(
-                f"Initializing remote cache from {self.cache_url.get_secret_value()}"
-            )
-            self._remote_cache = redis.Redis.from_url(self.cache_url.get_secret_value())
-
-        return self._remote_cache
+    # @property
+    # def cache_url_safe(self) -> str:
+    #     parsed_path = urlparse(self.cache_url)
+    #     return parsed_path._replace(password="***").geturl()
 
     @property
-    def local_cache(self) -> diskcache.Cache:
-        if self._local_cache is None:
-            logger.info(f"Initializing local cache in {self.cache_dir}")
-            self._local_cache = diskcache.Cache(self.cache_dir)
-        return self._local_cache
+    def cache_url_safe(self) -> str:
+        parsed = urllib.parse.urlparse(self.cache_url)
+
+        # If there's a password (and/or username), rebuild netloc with masked creds
+        if parsed.password is not None:
+            user = parsed.username or ""
+            host = parsed.hostname or ""
+            port = f":{parsed.port}" if parsed.port is not None else ""
+            # if only a password (no username),
+            # parsed.username=="" → user=="" → ":***@host"
+            credentials = f"{user}:***"
+            netloc = f"{credentials}@{host}{port}"
+        else:
+            # no credentials present
+            netloc = parsed.netloc
+
+        safe_parsed = urllib.parse.ParseResult(
+            scheme=parsed.scheme,
+            netloc=netloc,
+            path=parsed.path,
+            params=parsed.params,
+            query=parsed.query,
+            fragment=parsed.fragment,
+        )
+        return safe_parsed.geturl()
 
     @property
     def cache(self) -> typing.Union[redis.Redis, diskcache.Cache]:
-        if self.cache_url is None:
-            return self.local_cache
+        if self._cache is None:
 
-        return self.remote_cache
+            if self.is_redis_cache:
+                logger.info(f"Initializing redis cache from {self.cache_url}")
+                _redis_cache = redis.Redis.from_url(self.cache_url)
+
+                try:
+                    _redis_cache.ping()
+                    logger.info(
+                        "Successfully connected to redis cache "
+                        + f"at {self.cache_url_safe}"
+                    )
+                    self._cache = _redis_cache
+                    return self._cache
+
+                except redis.exceptions.ConnectionError as e:
+                    logger.exception(e)
+                    raise ValueError(
+                        f"Failed to connect to redis cache at {self.cache_url_safe}"
+                    )
+
+            else:
+                logger.info(f"Initializing local cache in {self.cache_url}")
+                _local_cache = diskcache.Cache(self.cache_url)
+                try:
+                    _local_cache.set(".init", True, 1)
+                    self._cache = _local_cache
+                    return self._cache
+                except Exception as e:
+                    logger.exception(e)
+                    raise ValueError(
+                        f"Failed to initialize local cache in {self.cache_url_safe}"
+                    )
+
+        return self._cache
 
     def get_cache_key(self, key: typing.Text, *, with_prefix: bool = True) -> str:
         return (
