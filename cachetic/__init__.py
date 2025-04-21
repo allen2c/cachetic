@@ -101,15 +101,18 @@ class Cachetic(
 
         return self.remote_cache
 
+    def get_cache_key(self, key: typing.Text, *, with_prefix: bool = True) -> str:
+        return (
+            f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
+        )
+
     def get(
         self,
         key: typing.Text,
-        *,
-        with_prefix: bool = True,
+        *args,
+        **kwargs,
     ) -> typing.Optional[SUPPORTED_OBJECT_TYPE_VAR]:
-        _key = (
-            f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
-        )
+        _key = self.get_cache_key(key, with_prefix=True)
 
         logger.debug(f"Getting cache for '{_key}'")
         data = self.cache.get(_key)
@@ -156,10 +159,10 @@ class Cachetic(
     def get_or_raise(
         self,
         key: typing.Text,
-        *,
-        with_prefix: bool = True,
+        *args,
+        **kwargs,
     ) -> SUPPORTED_OBJECT_TYPE_VAR:
-        out = self.get(key, with_prefix=with_prefix)
+        out = self.get(key, *args, **kwargs)
         if out is None:
             raise CacheNotFoundError(f"Cache not found for key '{key}'")
         return out
@@ -169,12 +172,10 @@ class Cachetic(
         key: typing.Text,
         value: SUPPORTED_OBJECT_TYPE_VAR,
         ex: typing.Optional[int] = None,
-        *,
-        with_prefix: bool = True,
+        *args,
+        **kwargs,
     ) -> None:
-        _key = (
-            f"{self.cache_prefix}:{key}" if with_prefix and self.cache_prefix else key
-        )
+        _key = self.get_cache_key(key, with_prefix=True)
 
         ex = ex if ex is not None else self.cache_ttl if self.cache_ttl > 0 else None
         if ex == 0:
