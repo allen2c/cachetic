@@ -1,4 +1,5 @@
 import functools
+import inspect
 import logging
 import pathlib
 import typing
@@ -27,7 +28,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
     object_type: pydantic.TypeAdapter[T]
 
-    cache_url: typing.Text
+    cache_url: typing.Text | pathlib.Path | redis.Redis | diskcache.Cache
     default_ttl: int = pydantic.Field(
         default=-1,
         description=(
@@ -49,14 +50,23 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
     @functools.cached_property
     def cache(self) -> diskcache.Cache | redis.Redis:
-        parsed_path = urllib.parse.urlparse(self.cache_url)
-        if parsed_path.scheme == "redis":
-            return redis.Redis.from_url(self.cache_url)
-        return diskcache.Cache(self.cache_url)
+        if isinstance(self.cache_url, redis.Redis):
+            return self.cache_url
+        if isinstance(self.cache_url, diskcache.Cache):
+            return self.cache_url
+        if isinstance(self.cache_url, pathlib.Path):
+            return diskcache.Cache(self.cache_url)
+        if isinstance(self.cache_url, str):
+            parsed_path = urllib.parse.urlparse(self.cache_url)
+            if parsed_path.scheme == "redis":
+                return redis.Redis.from_url(self.cache_url)
+            return diskcache.Cache(self.cache_url)
+
+        raise ValueError(f"Unsupported cache url: {self.cache_url}")
 
     @property
     def cache_url_safe(self) -> str:
-        return _hide_url_password(self.cache_url)
+        return _hide_url_password(str(self.cache_url))
 
     def get_cache_key(self, key: typing.Text, *, with_prefix: bool = True) -> str:
         return f"{self.prefix}:{key}" if with_prefix and self.prefix else key
@@ -75,7 +85,9 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         if data is None:
             return None
 
-        if issubclass(self.object_type._type, bytes):
+        if inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        ):
             return self.object_type.validate_python(data)
 
         else:
@@ -108,7 +120,12 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         ex_params = None if ex < 0 else ex
 
         # Dump value
-        _value_bytes = self.object_type.dump_json(value)
+        if inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        ):
+            _value_bytes = typing.cast(bytes, self.object_type.validate_python(value))
+        else:
+            _value_bytes = self.object_type.dump_json(value)
 
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
         self.cache.set(_key, _value_bytes, ex_params)
