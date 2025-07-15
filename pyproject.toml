@@ -1,10 +1,10 @@
 [project]
 authors = [{ name = "Allen Chou", email = "f1470891079@gmail.com" }]
 dependencies = [
-  "diskcache (>=5,<6)",
+  "diskcache (>=5)",
   "pydantic (>=2,<3)",
   "pydantic-settings (>=2,<3)",
-  "redis (>=5,<6)",
+  "redis (>=5)",
 ]
 description = "Simple cache with pydantic."
 license = { text = "MIT" }
