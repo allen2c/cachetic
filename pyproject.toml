@@ -11,16 +11,16 @@ license = { text = "MIT" }
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-version = "0.2.0"
+version = "0.3.0"
 
 [tool.poetry.group.dev.dependencies]
-black = "^25.1.0"
-codepress = "^0.1.1"
-isort = "^6.0.0"
-logging-bullet-train = "^0.3.0"
-mkdocs-material = "^9.6.5"
-poetry-plugin-export = "^1.9.0"
-pytest = "^8.3.4"
+black = "*"
+codepress = "*"
+isort = "*"
+logging-bullet-train = "*"
+mkdocs-material = "*"
+poetry-plugin-export = "*"
+pytest = "*"
 
 [tool.isort]
 profile = "black"
