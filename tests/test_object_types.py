@@ -85,7 +85,7 @@ def test_bool(temp_cache_url: pathlib.Path):
 
 
 def test_list(temp_cache_url: pathlib.Path):
-    """Tests caching lists (via JSON)."""
+    """Tests caching lists."""
     cache = Cachetic[list](
         object_type=pydantic.TypeAdapter(list),
         cache_url=temp_cache_url,
@@ -99,7 +99,7 @@ def test_list(temp_cache_url: pathlib.Path):
 
 
 def test_dict(temp_cache_url: pathlib.Path):
-    """Tests caching dictionaries (via JSON)."""
+    """Tests caching dictionaries."""
     cache = Cachetic[dict](
         object_type=pydantic.TypeAdapter(dict),
         cache_url=temp_cache_url,
@@ -129,7 +129,7 @@ def test_pydantic_model(temp_cache_url: pathlib.Path):
 
 
 def test_pydantic_models(temp_cache_url: pathlib.Path):
-    """Tests caching Pydantic models."""
+    """Tests caching lists of Pydantic models."""
     cache = Cachetic[typing.List[Person]](
         object_type=pydantic.TypeAdapter(typing.List[Person]),
         cache_url=temp_cache_url,

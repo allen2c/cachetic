@@ -1,3 +1,8 @@
+"""A simple, flexible caching library supporting Redis and disk-based storage.
+
+Provides type-safe caching with configurable TTL and automatic serialization.
+"""
+
 import functools
 import inspect
 import logging
@@ -20,10 +25,17 @@ logger = logging.getLogger(__name__)
 
 
 class CacheNotFoundError(Exception):
+    """Raised when a cache key is not found."""
+
     pass
 
 
 class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
+    """A type-safe cache client supporting Redis and disk storage.
+
+    Provides automatic serialization/deserialization with configurable TTL.
+    """
+
     model_config = pydantic_settings.SettingsConfigDict(arbitrary_types_allowed=True)
 
     object_type: pydantic.TypeAdapter[T]
@@ -45,11 +57,16 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
     @pydantic.model_validator(mode="after")
     def validate_ttl(self) -> typing.Self:
+        """Validates and normalizes the TTL value after model initialization."""
         self.default_ttl = _validate_ttl_value(self.default_ttl)
         return self
 
     @functools.cached_property
     def cache(self) -> diskcache.Cache | redis.Redis:
+        """Returns the underlying cache instance based on cache_url.
+
+        Automatically creates Redis or DiskCache instances from URLs or paths.
+        """
         if isinstance(self.cache_url, redis.Redis):
             return self.cache_url
         if isinstance(self.cache_url, diskcache.Cache):
@@ -66,9 +83,16 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
     @property
     def cache_url_safe(self) -> str:
+        """Returns cache URL with masked credentials for safe logging."""
         return _hide_url_password(str(self.cache_url))
 
     def get_cache_key(self, key: typing.Text, *, with_prefix: bool = True) -> str:
+        """Generates cache key with optional prefix.
+
+        Args:
+            key: Base cache key
+            with_prefix: Whether to include the configured prefix
+        """
         return f"{self.prefix}:{key}" if with_prefix and self.prefix else key
 
     def get(
@@ -77,6 +101,10 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         *args,
         **kwargs,
     ) -> typing.Optional[T]:
+        """Retrieves and deserializes value from cache.
+
+        Returns None if key doesn't exist or cache miss occurs.
+        """
         _key = self.get_cache_key(key, with_prefix=True)
 
         logger.debug(f"Getting cache for '{_key}'")
@@ -99,6 +127,10 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         *args,
         **kwargs,
     ) -> T:
+        """Retrieves value from cache or raises CacheNotFoundError.
+
+        Similar to get() but throws exception instead of returning None.
+        """
         out = self.get(key, *args, **kwargs)
         if out is None:
             raise CacheNotFoundError(f"Cache not found for key '{key}'")
@@ -112,6 +144,13 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         *args,
         **kwargs,
     ) -> None:
+        """Serializes and stores value in cache with optional TTL.
+
+        Args:
+            key: Cache key
+            value: Value to cache
+            ex: TTL in seconds (uses default_ttl if None)
+        """
         _key = self.get_cache_key(key, with_prefix=True)
 
         ex = _validate_ttl_value(ex if ex is not None else self.default_ttl)
@@ -132,6 +171,10 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
 
 def _hide_url_password(url: str) -> str:
+    """Masks password in URL for safe logging.
+
+    Replaces actual password with '***' while preserving URL structure.
+    """
     parsed = urllib.parse.urlparse(url)
 
     # If there's a password (and/or username), rebuild netloc with masked creds
@@ -159,6 +202,10 @@ def _hide_url_password(url: str) -> str:
 
 
 def _validate_ttl_value(ttl: int) -> int:
+    """Validates and normalizes TTL values.
+
+    Ensures TTL is either -1 (no expiration) or positive integer.
+    """
     if ttl < 0:
         return -1
     return ttl
