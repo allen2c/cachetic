@@ -11,7 +11,10 @@ license = { text = "MIT" }
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-version = "0.3.0"
+version = "0.4.0"
+
+[project.optional-dependencies]
+mongo = ["pymongo (>=4)"]
 
 [tool.poetry.group.dev.dependencies]
 black = "*"
@@ -20,6 +23,7 @@ isort = "*"
 logging-bullet-train = "*"
 mkdocs-material = "*"
 poetry-plugin-export = "*"
+pymongo = "*"
 pytest = "*"
 
 [tool.isort]
