@@ -1,4 +1,6 @@
 import logging
+import math
+import time
 import typing
 import urllib.parse
 
@@ -60,6 +62,26 @@ class MongoCache(CacheProtocol):
 
     def set(
         self, name: str, value: bytes, ex: typing.Optional[int] = None, *args, **kwargs
-    ) -> None: ...
+    ) -> None:
+        _ex = None if ex is None or ex < 1 else math.ceil(ex)
+        if _ex is not None:
+            _ex = int(time.time()) + _ex
 
-    def get(self, name: str, *args, **kwargs) -> typing.Optional[bytes]: ...
+        self.col.update_one(
+            {"name": name}, {"$set": {"value": value, "ex": _ex}}, upsert=True
+        )
+
+    def get(self, name: str, *args, **kwargs) -> typing.Optional[bytes]:
+        _doc = self.col.find_one({"name": name})
+
+        if _doc is None:
+            return None
+
+        if _doc["ex"] is None:
+            return _doc["value"]
+
+        if _doc["ex"] < int(time.time()):
+            self.col.delete_one({"name": name})
+            return None
+
+        return _doc["value"]
