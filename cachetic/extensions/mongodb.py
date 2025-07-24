@@ -17,7 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 class MongoCache(CacheProtocol):
+    """A cache that uses MongoDB as a backend."""
+
     def __init__(self, cache_url: str):
+        """Initializes the cache from a MongoDB URL.
+
+        The URL must contain a database path and a collection query parameter.
+        """
         __might_url_str = str_or_none(cache_url)
         if __might_url_str is None:
             raise ValueError(f"Invalid mongo url: {cache_url}")
@@ -63,6 +69,7 @@ class MongoCache(CacheProtocol):
     def set(
         self, name: str, value: bytes, ex: typing.Optional[int] = None, *args, **kwargs
     ) -> None:
+        """Sets a key-value pair, with an optional expiration in seconds."""
         _ex = None if ex is None or ex < 1 else math.ceil(ex)
         if _ex is not None:
             _ex = int(time.time()) + _ex
@@ -72,6 +79,10 @@ class MongoCache(CacheProtocol):
         )
 
     def get(self, name: str, *args, **kwargs) -> typing.Optional[bytes]:
+        """Retrieves a value by key.
+
+        Returns None if the key doesn't exist or has expired.
+        """
         _doc = self.col.find_one({"name": name})
 
         if _doc is None:
@@ -85,3 +96,7 @@ class MongoCache(CacheProtocol):
             return None
 
         return _doc["value"]
+
+    def delete(self, name: str, *args, **kwargs) -> None:
+        """Deletes a key-value pair from the cache."""
+        self.col.delete_one({"name": name})
