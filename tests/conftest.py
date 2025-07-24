@@ -19,3 +19,13 @@ def set_env_vars():
 def temp_cache_url():
     with tempfile.TemporaryDirectory() as temp_dir:
         yield pathlib.Path(temp_dir).joinpath(".cachetic")
+
+
+@pytest.fixture(scope="module")
+def redis_connection_string():
+    return "redis://localhost:6379/0"
+
+
+@pytest.fixture(scope="module")
+def mongo_connection_string():
+    return "mongodb://localhost:27017/cachetic?collection=test"

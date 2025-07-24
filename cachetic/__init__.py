@@ -182,6 +182,11 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
         self.cache.set(_key, _value_bytes, ex_params)
 
+    def delete(self, key: typing.Text, *args, **kwargs) -> None:
+        """Deletes a key-value pair from the cache."""
+        _key = self.get_cache_key(key, with_prefix=True)
+        self.cache.delete(_key)
+
 
 def _validate_ttl_value(ttl: int) -> int:
     """Validates and normalizes TTL values.
