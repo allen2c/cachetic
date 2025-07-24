@@ -16,6 +16,9 @@ import pydantic_settings
 import redis
 import redis.exceptions
 
+if typing.TYPE_CHECKING:
+    from cachetic.types.cache_protocol import CacheProtocol
+
 T = typing.TypeVar("T")
 
 __version__ = pathlib.Path(__file__).parent.joinpath("VERSION").read_text().strip()
@@ -62,7 +65,9 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         return self
 
     @functools.cached_property
-    def cache(self) -> diskcache.Cache | redis.Redis:
+    def cache(
+        self,
+    ) -> typing.Union[diskcache.Cache, redis.Redis, "CacheProtocol"]:
         """Returns the underlying cache instance based on cache_url.
 
         Automatically creates Redis or DiskCache instances from URLs or paths.
@@ -77,6 +82,12 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
             parsed_path = urllib.parse.urlparse(self.cache_url)
             if parsed_path.scheme == "redis":
                 return redis.Redis.from_url(self.cache_url)
+            elif parsed_path.scheme.startswith("mongo"):
+                from cachetic.extensions.mongodb import MongoCache
+
+                __mongo_cache = MongoCache(self.cache_url)
+                return __mongo_cache
+
             return diskcache.Cache(self.cache_url)
 
         raise ValueError(f"Unsupported cache url: {self.cache_url}")
@@ -84,7 +95,9 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
     @property
     def cache_url_safe(self) -> str:
         """Returns cache URL with masked credentials for safe logging."""
-        return _hide_url_password(str(self.cache_url))
+        from cachetic.utils.hide_url_password import hide_url_password
+
+        return hide_url_password(str(self.cache_url))
 
     def get_cache_key(self, key: typing.Text, *, with_prefix: bool = True) -> str:
         """Generates cache key with optional prefix.
@@ -169,36 +182,10 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
         self.cache.set(_key, _value_bytes, ex_params)
 
-
-def _hide_url_password(url: str) -> str:
-    """Masks password in URL for safe logging.
-
-    Replaces actual password with '***' while preserving URL structure.
-    """
-    parsed = urllib.parse.urlparse(url)
-
-    # If there's a password (and/or username), rebuild netloc with masked creds
-    if parsed.password is not None:
-        user = parsed.username or ""
-        host = parsed.hostname or ""
-        port = f":{parsed.port}" if parsed.port is not None else ""
-        # if only a password (no username),
-        # parsed.username=="" → user=="" → ":***@host"
-        credentials = f"{user}:***"
-        netloc = f"{credentials}@{host}{port}"
-    else:
-        # no credentials present
-        netloc = parsed.netloc
-
-    safe_parsed = urllib.parse.ParseResult(
-        scheme=parsed.scheme,
-        netloc=netloc,
-        path=parsed.path,
-        params=parsed.params,
-        query=parsed.query,
-        fragment=parsed.fragment,
-    )
-    return safe_parsed.geturl()
+    def delete(self, key: typing.Text, *args, **kwargs) -> None:
+        """Deletes a key-value pair from the cache."""
+        _key = self.get_cache_key(key, with_prefix=True)
+        self.cache.delete(_key)
 
 
 def _validate_ttl_value(ttl: int) -> int:
