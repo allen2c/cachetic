@@ -15,6 +15,7 @@ import pydantic
 import pydantic_settings
 import redis
 import redis.exceptions
+from rich.pretty import pretty_repr
 
 if typing.TYPE_CHECKING:
     from cachetic.types.cache_protocol import CacheProtocol
@@ -120,7 +121,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         """
         _key = self.get_cache_key(key, with_prefix=True)
 
-        logger.debug(f"Getting cache for '{_key}'")
+        logger.debug(f"[GET] cache: {pretty_repr(_key, max_string=40)}")
         data = self.cache.get(_key)
 
         if data is None:
@@ -179,7 +180,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         else:
             _value_bytes = self.object_type.dump_json(value)
 
-        logger.debug(f"Setting cache for '{_key}' with TTL {ex}")
+        logger.debug(f"[SET] cache(ex={ex}): {pretty_repr(_key, max_string=40)}")
         self.cache.set(_key, _value_bytes, ex_params)
 
     def delete(self, key: typing.Text, *args, **kwargs) -> None:
