@@ -6,7 +6,6 @@ import urllib.parse
 
 import pydantic
 import pymongo
-import pymongo.collation
 from str_or_none import str_or_none
 
 from cachetic.types.cache_protocol import CacheProtocol

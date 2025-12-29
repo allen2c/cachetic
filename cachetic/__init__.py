@@ -14,7 +14,6 @@ import diskcache
 import pydantic
 import pydantic_settings
 import redis
-import redis.exceptions
 from rich.pretty import pretty_repr
 
 if typing.TYPE_CHECKING:
@@ -57,6 +56,16 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
     prefix: str = pydantic.Field(
         default="",
         description="The prefix of the cache key.",
+    )
+
+    # New in version 0.5.0
+    compression: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Enable compression for cached values. "
+            "When enabled, values are compressed before storage and decompressed on retrieval. "  # noqa: E501
+            "Automatic decompression occurs during validation errors if compressed data is detected."  # noqa: E501
+        ),
     )
 
     @pydantic.model_validator(mode="after")
@@ -127,13 +136,8 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         if data is None:
             return None
 
-        if inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        ):
-            return self.object_type.validate_python(data)
-
-        else:
-            return self.object_type.validate_json(data)  # type: ignore
+        # Load value
+        return self._loads_any(data)
 
     def get_or_raise(
         self,
@@ -173,12 +177,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         ex_params = None if ex < 0 else ex
 
         # Dump value
-        if inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        ):
-            _value_bytes = typing.cast(bytes, self.object_type.validate_python(value))
-        else:
-            _value_bytes = self.object_type.dump_json(value)
+        _value_bytes = self._dump_any(value)
 
         logger.debug(f"[SET] cache(ex={ex}): {pretty_repr(_key, max_string=40)}")
         self.cache.set(_key, _value_bytes, ex_params)
@@ -187,6 +186,55 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         """Deletes a key-value pair from the cache."""
         _key = self.get_cache_key(key, with_prefix=True)
         self.cache.delete(_key)
+
+    def _validate_any(self, data: typing.Any) -> T:
+        if inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        ):
+            return self.object_type.validate_python(data)
+
+        else:
+            return self.object_type.validate_json(data)  # type: ignore
+
+    def _loads_any(self, data: typing.Any) -> T:
+        from cachetic.utils.compression import decompress_auto, might_compressed
+
+        if data is None:
+            raise ValueError("Input data must not be None")
+
+        if self.compression:
+            data = decompress_auto(data)  # type: ignore
+
+        try:
+            return self._validate_any(data)
+
+        except pydantic.ValidationError as e:
+            if might_compressed(data):
+                logger.warning(
+                    "Validation error, but data might be compressed, "
+                    + "trying to decompress and validate again. "
+                    + f"Error: {str(e)}, Data: {pretty_repr(data, max_string=40)}"
+                )
+                data = decompress_auto(data)
+                return self._validate_any(data)
+
+            logger.error(f"Validation error: {str(e)}")
+            raise e
+
+    def _dump_any(self, value: T) -> bytes:
+        from cachetic.utils.compression import compress_auto
+
+        if inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        ):
+            data_bytes = typing.cast(bytes, self.object_type.validate_python(value))
+        else:
+            data_bytes = self.object_type.dump_json(value)
+
+        if self.compression:
+            data_bytes = compress_auto(data_bytes)
+
+        return data_bytes
 
 
 def _validate_ttl_value(ttl: int) -> int:
