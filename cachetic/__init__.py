@@ -58,6 +58,16 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         description="The prefix of the cache key.",
     )
 
+    # New in version 0.5.0
+    compression: typing.Literal["auto"] | bool = pydantic.Field(
+        default="auto",
+        description=(
+            "Whether to compress the cache value. "
+            + "If 'auto', the process will try to compress/decompress the value "
+            + "from/to bytes."
+        ),
+    )
+
     @pydantic.model_validator(mode="after")
     def validate_ttl(self) -> typing.Self:
         """Validates and normalizes the TTL value after model initialization."""
@@ -126,13 +136,8 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         if data is None:
             return None
 
-        if inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        ):
-            return self.object_type.validate_python(data)
-
-        else:
-            return self.object_type.validate_json(data)  # type: ignore
+        # Load value
+        return self._loads_any(data)
 
     def get_or_raise(
         self,
@@ -172,12 +177,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         ex_params = None if ex < 0 else ex
 
         # Dump value
-        if inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        ):
-            _value_bytes = typing.cast(bytes, self.object_type.validate_python(value))
-        else:
-            _value_bytes = self.object_type.dump_json(value)
+        _value_bytes = self._dump_any(value)
 
         logger.debug(f"[SET] cache(ex={ex}): {pretty_repr(_key, max_string=40)}")
         self.cache.set(_key, _value_bytes, ex_params)
@@ -186,6 +186,26 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         """Deletes a key-value pair from the cache."""
         _key = self.get_cache_key(key, with_prefix=True)
         self.cache.delete(_key)
+
+    def _loads_any(self, data: typing.Any) -> T:
+        if data is None:
+            raise ValueError("Input data must not be None")
+
+        if inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        ):
+            return self.object_type.validate_python(data)
+
+        else:
+            return self.object_type.validate_json(data)  # type: ignore
+
+    def _dump_any(self, value: T) -> bytes:
+        if inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        ):
+            return typing.cast(bytes, self.object_type.validate_python(value))
+        else:
+            return self.object_type.dump_json(value)
 
 
 def _validate_ttl_value(ttl: int) -> int:
