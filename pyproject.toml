@@ -5,6 +5,7 @@ dependencies = [
   "pydantic (>=2,<3)",
   "pydantic-settings",
   "redis (>=5)",
+  "rich",
   "str_or_none",
 ]
 description = "Simple cache with pydantic."
@@ -26,7 +27,6 @@ mkdocs-material = "*"
 poetry-plugin-export = "*"
 pymongo = "*"
 pytest = "*"
-rich = "*"
 
 [tool.isort]
 profile = "black"
