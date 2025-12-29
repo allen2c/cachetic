@@ -3,9 +3,7 @@ authors = [{ name = "Allen Chou", email = "f1470891079@gmail.com" }]
 dependencies = [
   "diskcache (>=5)",
   "pydantic (>=2,<3)",
-  "pydantic-settings (>=2,<3)",
-  "redis (>=5)",
-  "rich",
+  "pydantic-settings",
   "str_or_none",
 ]
 description = "Simple cache with pydantic."
@@ -13,10 +11,11 @@ license = { text = "MIT" }
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-version = "0.4.1"
+version = "0.5.0"
 
 [project.optional-dependencies]
 mongodb = ["pymongo (>=4)"]
+redis = ["redis (>=5)"]
 
 [tool.poetry.group.dev.dependencies]
 black = "*"
@@ -27,6 +26,8 @@ mkdocs-material = "*"
 poetry-plugin-export = "*"
 pymongo = "*"
 pytest = "*"
+redis = "*"
+rich = "*"
 
 [tool.isort]
 profile = "black"
