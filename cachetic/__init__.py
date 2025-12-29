@@ -188,8 +188,13 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         self.cache.delete(_key)
 
     def _loads_any(self, data: typing.Any) -> T:
+        from cachetic.utils.compression import decompress_auto
+
         if data is None:
             raise ValueError("Input data must not be None")
+
+        if self.compression == "auto" or self.compression is True:
+            data = decompress_auto(data)  # type: ignore
 
         if inspect.isclass(self.object_type._type) and issubclass(
             self.object_type._type, bytes
@@ -200,12 +205,19 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
             return self.object_type.validate_json(data)  # type: ignore
 
     def _dump_any(self, value: T) -> bytes:
+        from cachetic.utils.compression import compress_auto
+
         if inspect.isclass(self.object_type._type) and issubclass(
             self.object_type._type, bytes
         ):
-            return typing.cast(bytes, self.object_type.validate_python(value))
+            data_bytes = typing.cast(bytes, self.object_type.validate_python(value))
         else:
-            return self.object_type.dump_json(value)
+            data_bytes = self.object_type.dump_json(value)
+
+        if self.compression == "auto" or self.compression is True:
+            data_bytes = compress_auto(data_bytes)
+
+        return data_bytes
 
 
 def _validate_ttl_value(ttl: int) -> int:
