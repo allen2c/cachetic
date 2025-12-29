@@ -59,12 +59,12 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
     )
 
     # New in version 0.5.0
-    compression: typing.Literal["auto"] | bool = pydantic.Field(
-        default="auto",
+    compression: bool = pydantic.Field(
+        default=False,
         description=(
-            "Whether to compress the cache value. "
-            + "If 'auto', the process will try to compress/decompress the value "
-            + "from/to bytes."
+            "Enable compression for cached values. "
+            "When enabled, values are compressed before storage and decompressed on retrieval. "  # noqa: E501
+            "Automatic decompression occurs during validation errors if compressed data is detected."  # noqa: E501
         ),
     )
 
@@ -187,15 +187,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         _key = self.get_cache_key(key, with_prefix=True)
         self.cache.delete(_key)
 
-    def _loads_any(self, data: typing.Any) -> T:
-        from cachetic.utils.compression import decompress_auto
-
-        if data is None:
-            raise ValueError("Input data must not be None")
-
-        if self.compression == "auto" or self.compression is True:
-            data = decompress_auto(data)  # type: ignore
-
+    def _validate_any(self, data: typing.Any) -> T:
         if inspect.isclass(self.object_type._type) and issubclass(
             self.object_type._type, bytes
         ):
@@ -203,6 +195,31 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
         else:
             return self.object_type.validate_json(data)  # type: ignore
+
+    def _loads_any(self, data: typing.Any) -> T:
+        from cachetic.utils.compression import decompress_auto, might_compressed
+
+        if data is None:
+            raise ValueError("Input data must not be None")
+
+        if self.compression:
+            data = decompress_auto(data)  # type: ignore
+
+        try:
+            return self._validate_any(data)
+
+        except pydantic.ValidationError as e:
+            if might_compressed(data):
+                logger.warning(
+                    "Validation error, but data might be compressed, "
+                    + "trying to decompress and validate again. "
+                    + f"Error: {str(e)}, Data: {pretty_repr(data, max_string=40)}"
+                )
+                data = decompress_auto(data)
+                return self._validate_any(data)
+
+            logger.error(f"Validation error: {str(e)}")
+            raise e
 
     def _dump_any(self, value: T) -> bytes:
         from cachetic.utils.compression import compress_auto
@@ -214,7 +231,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         else:
             data_bytes = self.object_type.dump_json(value)
 
-        if self.compression == "auto" or self.compression is True:
+        if self.compression:
             data_bytes = compress_auto(data_bytes)
 
         return data_bytes

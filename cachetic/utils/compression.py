@@ -1,7 +1,10 @@
+import logging
 import zlib
 from typing import Literal
 
 from cachetic.extensions.compression import DecompressionError
+
+logger = logging.getLogger(__name__)
 
 # Try to import zstandard (pip install zstandard)
 # This prepares the code for future Python versions or environments with zstd support.
@@ -9,14 +12,23 @@ try:
     import zstandard as zstd
 
     HAS_ZSTD = True
+    logger.debug("Zstandard library found")
 except ImportError:
     HAS_ZSTD = False
+    logger.debug("Zstandard library not found")
 
 
 # Zstd frame magic header (Little Endian: 0xFD2FB528 -> Bytes: 28 B5 2F FD)
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 # Zlib default header usually starts with 0x78 (Deflate)
 ZLIB_MAGIC = b"\x78"
+
+
+def might_compressed(data: bytes) -> bool:
+    """
+    Checks if the data might be compressed.
+    """
+    return data.startswith(ZSTD_MAGIC) or data.startswith(ZLIB_MAGIC)
 
 
 def compress_auto(
@@ -95,8 +107,7 @@ def decompress_auto(data: bytes) -> bytes:
             dctx = zstd.ZstdDecompressor()
             return dctx.decompress(data)
         except Exception as e:
-            # Zstd header is very specific (4 bytes).
-            # If it matches but fails, data is corrupt.
+            logger.error(f"Detect Zstd header but decompression failed: {str(e)}")
             raise DecompressionError(f"Zstd decompression failed: {str(e)}") from e
 
     # 2. Zlib Detection (Medium Confidence)
@@ -104,10 +115,10 @@ def decompress_auto(data: bytes) -> bytes:
         try:
             return zlib.decompress(data)
         except zlib.error:
-            # Zlib header is short (1 byte check here).
-            # If decompression fails,
-            # it's very likely just raw data that started with 0x78.
-            # "Smart" behavior: Fallback to Raw.
+            logger.warning(
+                "Detect Zlib header but decompression failed, "
+                + "it might be raw data starting with 0x78."
+            )
             return data
 
     # 3. Raw Data
