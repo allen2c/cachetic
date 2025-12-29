@@ -14,7 +14,6 @@ import diskcache
 import pydantic
 import pydantic_settings
 import redis
-import redis.exceptions
 from rich.pretty import pretty_repr
 
 if typing.TYPE_CHECKING:
