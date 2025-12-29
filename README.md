@@ -11,6 +11,7 @@ A simple, type-safe caching library supporting Redis and disk storage with autom
 - **Type-safe**: Full type checking with generic support
 - **Flexible backends**: Local disk cache (diskcache) or Redis
 - **Pydantic integration**: Automatic serialization for any type via TypeAdapter
+- **Compression support**: Optional zstd/zlib compression with automatic detection
 - **Simple API**: Just `get()` and `set()` with optional TTL
 
 ## Installation
@@ -100,6 +101,40 @@ people = [Person(name="Alice", age=30), Person(name="Bob", age=25)]
 people_cache.set("team", people)
 ```
 
+### Compression Support
+
+Enable compression to reduce storage space and bandwidth usage:
+
+```python
+# Enable compression (auto-selects best algorithm)
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url=".cache",
+    compression=True  # New in v0.5.0
+)
+
+person = Person(name="Alice", age=30)
+cache.set("user:1", person)  # Automatically compressed
+result = cache.get("user:1")  # Automatically decompressed
+```
+
+**Compression Algorithms:**
+
+- **zstd** (preferred): Used if `zstandard` package is installed
+- **zlib** (fallback): Built-in Python standard library
+
+**Automatic Detection:**
+
+- Caches with `compression=False` can still read compressed data
+- Automatic decompression occurs when compressed data is detected
+- Seamless migration between compressed and uncompressed caches
+
+**Installation with zstd support:**
+
+```bash
+pip install cachetic zstandard
+```
+
 ## Configuration
 
 ### Constructor Parameters
@@ -108,6 +143,7 @@ people_cache.set("team", people)
 - **`cache_url`**: Cache backend - file path for disk cache or `redis://...` for Redis
 - **`default_ttl`**: Default expiration in seconds (`-1` = no expiration, `0` = disabled)
 - **`prefix`**: Key prefix for all cache operations
+- **`compression`**: Enable compression for cached values (default: `False`)
 
 ### TTL Examples
 
@@ -136,6 +172,7 @@ Use `CACHETIC_` prefix:
 export CACHETIC_CACHE_URL="redis://localhost:6379/0"
 export CACHETIC_DEFAULT_TTL=3600
 export CACHETIC_PREFIX="myapp"
+export CACHETIC_COMPRESSION=true
 ```
 
 ## Error Handling
