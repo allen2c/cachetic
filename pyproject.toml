@@ -5,7 +5,6 @@ dependencies = [
   "pydantic (>=2,<3)",
   "pydantic-settings",
   "redis (>=5)",
-  "rich",
   "str_or_none",
 ]
 description = "Simple cache with pydantic."
@@ -13,7 +12,7 @@ license = { text = "MIT" }
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-version = "0.5.0"
+version = "0.6.0"
 
 [project.optional-dependencies]
 mongodb = ["pymongo (>=4)"]
@@ -27,6 +26,7 @@ mkdocs-material = "*"
 poetry-plugin-export = "*"
 pymongo = "*"
 pytest = "*"
+rich = "*"
 
 [tool.isort]
 profile = "black"

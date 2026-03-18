@@ -68,10 +68,15 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         ),
     )
 
+    _is_bytes_type: bool = pydantic.PrivateAttr(default=False)
+
     @pydantic.model_validator(mode="after")
-    def validate_ttl(self) -> typing.Self:
-        """Validates and normalizes the TTL value after model initialization."""
+    def validate_after_init(self) -> typing.Self:
+        """Validates and normalizes fields after model initialization."""
         self.default_ttl = _validate_ttl_value(self.default_ttl)
+        self._is_bytes_type = inspect.isclass(self.object_type._type) and issubclass(
+            self.object_type._type, bytes
+        )
         return self
 
     @functools.cached_property
@@ -130,7 +135,8 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         """
         _key = self.get_cache_key(key, with_prefix=True)
 
-        logger.debug(f"[GET] cache: {pretty_repr(_key, max_string=40)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"[GET] cache: {pretty_repr(_key, max_string=40)}")
         data = self.cache.get(_key)
 
         if data is None:
@@ -179,7 +185,8 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         # Dump value
         _value_bytes = self._dump_any(value)
 
-        logger.debug(f"[SET] cache(ex={ex}): {pretty_repr(_key, max_string=40)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"[SET] cache(ex={ex}): {pretty_repr(_key, max_string=40)}")
         self.cache.set(_key, _value_bytes, ex_params)
 
     def delete(self, key: typing.Text, *args, **kwargs) -> None:
@@ -188,13 +195,9 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         self.cache.delete(_key)
 
     def _validate_any(self, data: typing.Any) -> T:
-        if inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        ):
+        if self._is_bytes_type:
             return self.object_type.validate_python(data)
-
-        else:
-            return self.object_type.validate_json(data)  # type: ignore
+        return self.object_type.validate_json(data)  # type: ignore
 
     def _loads_any(self, data: typing.Any) -> T:
         from cachetic.utils.compression import decompress_auto, might_compressed
@@ -212,8 +215,10 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
             if might_compressed(data):
                 logger.warning(
                     "Validation error, but data might be compressed, "
-                    + "trying to decompress and validate again. "
-                    + f"Error: {str(e)}, Data: {pretty_repr(data, max_string=40)}"
+                    "trying to decompress and validate again. "
+                    "Error: %s, Data: %s",
+                    e,
+                    pretty_repr(data, max_string=40),
                 )
                 data = decompress_auto(data)
                 return self._validate_any(data)
@@ -224,9 +229,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
     def _dump_any(self, value: T) -> bytes:
         from cachetic.utils.compression import compress_auto
 
-        if inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        ):
+        if self._is_bytes_type:
             data_bytes = typing.cast(bytes, self.object_type.validate_python(value))
         else:
             data_bytes = self.object_type.dump_json(value)

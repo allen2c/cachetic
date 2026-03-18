@@ -9,9 +9,10 @@ A simple, type-safe caching library supporting Redis and disk storage with autom
 ## Features
 
 - **Type-safe**: Full type checking with generic support
-- **Flexible backends**: Local disk cache (diskcache) or Redis
+- **Flexible backends**: Local disk cache (diskcache), Redis, or MongoDB
 - **Pydantic integration**: Automatic serialization for any type via TypeAdapter
 - **Compression support**: Optional zstd/zlib compression with automatic detection
+- **Connection pooling**: Shared MongoClient instances and deduplicated index creation (v0.6.0)
 - **Simple API**: Just `get()` and `set()` with optional TTL
 
 ## Installation
@@ -55,6 +56,23 @@ cache = Cachetic[Person](
     cache_url="redis://localhost:6379/0"
 )
 ```
+
+### MongoDB Backend
+
+```python
+pip install cachetic[mongodb]
+```
+
+```python
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url="mongodb://localhost:27017/mydb?collection=mycache"
+)
+```
+
+Multiple `Cachetic` instances sharing the same MongoDB connection string automatically
+reuse a single `MongoClient`, avoiding repeated authentication handshakes and redundant
+index creation.
 
 ### Primitive Types
 
@@ -140,7 +158,7 @@ pip install cachetic zstandard
 ### Constructor Parameters
 
 - **`object_type`**: `pydantic.TypeAdapter[T]` - Required type adapter for serialization
-- **`cache_url`**: Cache backend - file path for disk cache or `redis://...` for Redis
+- **`cache_url`**: Cache backend - file path for disk cache, `redis://...` for Redis, or `mongodb://...` for MongoDB
 - **`default_ttl`**: Default expiration in seconds (`-1` = no expiration, `0` = disabled)
 - **`prefix`**: Key prefix for all cache operations
 - **`compression`**: Enable compression for cached values (default: `False`)

@@ -9,9 +9,10 @@ A simple, type-safe caching library supporting Redis and disk storage with autom
 ## Features
 
 - **Type-safe**: Full type checking with generic support
-- **Flexible backends**: Local disk cache (diskcache) or Redis
+- **Flexible backends**: Local disk cache (diskcache), Redis, or MongoDB
 - **Pydantic integration**: Automatic serialization for any type via TypeAdapter
 - **Compression support**: Optional zstd/zlib compression with automatic detection
+- **Connection pooling**: Shared MongoClient instances and deduplicated index creation (v0.6.0)
 - **Simple API**: Just `get()` and `set()` with optional TTL
 
 ## Installation
@@ -61,6 +62,25 @@ cache = Cachetic[Person](
     cache_url="redis://localhost:6379/0"
 )
 ```
+
+### MongoDB Backend
+
+```bash
+pip install cachetic[mongodb]
+```
+
+```python
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url="mongodb://localhost:27017/mydb?collection=mycache"
+)
+```
+
+!!! info "Connection Pooling (v0.6.0)"
+    Multiple `Cachetic` instances sharing the same MongoDB connection string automatically
+    reuse a single `MongoClient`, avoiding repeated authentication handshakes and redundant
+    index creation. This can save **hundreds of milliseconds** per instance in environments
+    like Azure CosmosDB.
 
 ## Usage Examples
 
@@ -155,7 +175,7 @@ result = cache.get("user:1")  # Automatically decompressed
 | Parameter     | Type             | Default  | Description                                                  |
 |---------------|------------------|----------|--------------------------------------------------------------|
 | `object_type` | `TypeAdapter[T]` | Required | Type adapter for serialization                               |
-| `cache_url`   | `str`            | Required | File path for disk cache or `redis://...` for Redis          |
+| `cache_url`   | `str`            | Required | File path for disk, `redis://...` for Redis, or `mongodb://...` for MongoDB |
 | `default_ttl` | `int`            | `-1`     | Expiration in seconds (`-1` = no expiration, `0` = disabled) |
 | `prefix`      | `str`            | `""`     | Key prefix for all cache operations                          |
 | `compression` | `bool`           | `False`  | Enable compression for cached values                         |

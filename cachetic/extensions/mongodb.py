@@ -14,6 +14,12 @@ from cachetic.utils.hide_url_password import hide_url_password
 
 logger = logging.getLogger(__name__)
 
+# CAC-001: Module-level registry to share MongoClient instances per connection URL
+_client_registry: typing.Dict[str, pymongo.MongoClient] = {}
+
+# CAC-002: Track (db, collection) pairs that already had their indexes ensured
+_ensured_indexes: typing.Set[typing.Tuple[str, str]] = set()
+
 
 class MongoCache(CacheProtocol):
     """A cache that uses MongoDB as a backend."""
@@ -61,15 +67,25 @@ class MongoCache(CacheProtocol):
             )
 
         __col_name = __col_names[0]
-        logger.debug(
-            f"Connecting to MongoDB database: {__db_name}, collection: {__col_name}"
-        )
-        __mongo_client = pymongo.MongoClient(__db_url, document_class=DocumentParam)
+
+        # CAC-001: Reuse MongoClient from registry if available
+        if __db_url in _client_registry:
+            __mongo_client = _client_registry[__db_url]
+            logger.debug(f"Reusing existing MongoClient for: {__safe_url}")
+        else:
+            __mongo_client = pymongo.MongoClient(__db_url, document_class=DocumentParam)
+            _client_registry[__db_url] = __mongo_client
+            logger.debug(f"Created new MongoClient for: {__safe_url}")
+
         __db = __mongo_client[__db_name]
         __col = __db[__col_name]
 
-        __col.create_index("name", unique=True)
-        logger.debug(f"Ensured unique index on 'name' in collection: {__col_name}")
+        # CAC-002: Only ensure index once per (db, collection) pair
+        __index_key = (__db_name, __col_name)
+        if __index_key not in _ensured_indexes:
+            __col.create_index("name", unique=True)
+            _ensured_indexes.add(__index_key)
+            logger.debug(f"Ensured unique index on 'name' in collection: {__col_name}")
 
         self.cache_url = pydantic.SecretStr(__db_url)
         self.client = __mongo_client
