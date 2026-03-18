@@ -12,9 +12,13 @@ try:
     import zstandard as zstd
 
     HAS_ZSTD = True
+    _ZSTD_COMPRESSOR: "zstd.ZstdCompressor" = zstd.ZstdCompressor(level=3)
+    _ZSTD_DECOMPRESSOR: "zstd.ZstdDecompressor" = zstd.ZstdDecompressor()
     logger.debug("Zstandard library found")
 except ImportError:
     HAS_ZSTD = False
+    _ZSTD_COMPRESSOR = None  # type: ignore[assignment]
+    _ZSTD_DECOMPRESSOR = None  # type: ignore[assignment]
     logger.debug("Zstandard library not found")
 
 
@@ -63,8 +67,7 @@ def compress_auto(
 
     # Execute compression
     if use_zstd:
-        cctx = zstd.ZstdCompressor(level=3)  # level 3 is default balance
-        return cctx.compress(data)
+        return _ZSTD_COMPRESSOR.compress(data)
     else:
         # level=6 is zlib default balance
         return zlib.compress(data, level=6)
@@ -104,8 +107,7 @@ def decompress_auto(data: bytes) -> bytes:
             )
 
         try:
-            dctx = zstd.ZstdDecompressor()
-            return dctx.decompress(data)
+            return _ZSTD_DECOMPRESSOR.decompress(data)
         except Exception as e:
             logger.error(f"Detect Zstd header but decompression failed: {str(e)}")
             raise DecompressionError(f"Zstd decompression failed: {str(e)}") from e
