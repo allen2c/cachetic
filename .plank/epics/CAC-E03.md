@@ -23,10 +23,11 @@ API call patterns all remain valid.
 
 | ID      | Title                                                        | Status |
 |---------|--------------------------------------------------------------|--------|
-| CAC-007 | Unify backend architecture with CacheProtocol adapters       | in-progress |
-| CAC-008 | Make Redis an optional extension                             | todo   |
-| CAC-009 | Implement Data URL serialization format with backward compat | todo   |
+| CAC-007 | Unify backend architecture with CacheProtocol adapters       | done   |
+| CAC-008 | Make Redis an optional extension                             | done   |
+| CAC-009 | Implement Data URL serialization format with backward compat | done   |
 | CAC-010 | Implement Postgres backend extension                         | todo   |
-| CAC-011 | Expand CacheProtocol with `exists` and `clear` methods       | todo   |
-| CAC-012 | Make `rich` a conditional import                             | todo   |
-| CAC-013 | Scope `str_or_none` to mongodb optional dependency           | todo   |
+| CAC-011 | Expand CacheProtocol with `exists` and `clear` methods       | done   |
+| CAC-012 | Make `rich` a conditional import                             | done   |
+| CAC-013 | Scope `str_or_none` to mongodb optional dependency           | done   |
+| CAC-014 | Add version compatibility tests for Data URL and legacy formats | todo   |

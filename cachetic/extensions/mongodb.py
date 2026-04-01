@@ -140,3 +140,17 @@ class MongoCache(CacheProtocol):
         """Deletes a key-value pair from the cache."""
         logger.debug(f"[MongoCache.delete] Deleting key='{name}'")
         self.col.delete_one({"name": name})
+
+    def exists(self, name: str, *args, **kwargs) -> bool:
+        """Checks if a key exists and has not expired."""
+        doc: dict[str, typing.Any] | None = self.col.find_one({"name": name})
+        if doc is None:
+            return False
+        if doc["ex"] is not None and doc["ex"] < int(time.time()):
+            self.col.delete_one({"name": name})
+            return False
+        return True
+
+    def clear(self) -> None:
+        """Removes all documents from the cache collection."""
+        self.col.delete_many({})

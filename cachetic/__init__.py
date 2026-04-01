@@ -198,23 +198,62 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         _key = self.get_cache_key(key, with_prefix=True)
         self.cache.delete(_key)
 
+    def exists(self, key: typing.Text) -> bool:
+        """Checks if a key exists in the cache backend."""
+        _key = self.get_cache_key(key, with_prefix=True)
+        return self.cache.exists(_key)
+
+    def clear(self) -> None:
+        """Removes all entries from the cache backend."""
+        self.cache.clear()
+
     def _validate_any(self, data: typing.Any) -> T:
         if self._is_bytes_type:
             return self.object_type.validate_python(data)
         return self.object_type.validate_json(data)  # type: ignore
 
-    def _loads_any(self, data: typing.Any) -> T:
-        from cachetic.utils.compression import decompress_auto, might_compressed
+    def _loads_any(self, data: bytes) -> T:
+        """Deserializes bytes from cache, auto-detecting the storage format.
 
+        Supports three formats:
+        1. Data URL (v0.7.0+): b"data:..." — parse DURL, extract payload
+        2. Compressed legacy (v0.5.0+): zstd/zlib magic bytes — decompress
+        3. Raw bytes legacy (v0.1.0+): plain JSON bytes or raw bytes
+        """
         if data is None:
             raise ValueError("Input data must not be None")
 
+        # Path 1: Data URL format (v0.7.0+)
+        if data.startswith(b"data:"):
+            return self._loads_durl(data)
+
+        # Path 2 & 3: Legacy formats (compressed or raw)
+        return self._loads_legacy(data)
+
+    def _loads_durl(self, data: bytes) -> T:
+        """Parses a Data URL value and returns the deserialized object."""
+        from durl import DURL
+
+        durl: DURL = DURL(data.decode("utf-8"))
+        payload: bytes = typing.cast(bytes, durl.parsed_data)
+
+        compression_alg: str | None = durl.parameters.get("compression")
+        if compression_alg is not None:
+            from cachetic.utils.compression import decompress_auto
+
+            payload = decompress_auto(payload)
+
+        return self._validate_any(payload)
+
+    def _loads_legacy(self, data: bytes) -> T:
+        """Handles legacy formats: compressed bytes or raw JSON/bytes."""
+        from cachetic.utils.compression import decompress_auto, might_compressed
+
         if self.compression:
-            data = decompress_auto(data)  # type: ignore
+            data = decompress_auto(data)
 
         try:
             return self._validate_any(data)
-
         except pydantic.ValidationError as e:
             if might_compressed(data):
                 logger.warning(
@@ -231,17 +270,43 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
             raise e
 
     def _dump_any(self, value: T) -> bytes:
-        from cachetic.utils.compression import compress_auto
+        """Serializes value into a Data URL encoded as UTF-8 bytes.
+
+        Format: data:<mime>;[compression=<alg>;]base64,<payload>
+        """
+        from durl import DURL
 
         if self._is_bytes_type:
-            data_bytes = typing.cast(bytes, self.object_type.validate_python(value))
+            mime_type: str = "application/octet-stream"
+            data_bytes: bytes = typing.cast(
+                bytes, self.object_type.validate_python(value)
+            )
         else:
+            mime_type = "application/json"
             data_bytes = self.object_type.dump_json(value)
 
+        parameters: dict[str, str] = {}
         if self.compression:
-            data_bytes = compress_auto(data_bytes)
+            from cachetic.utils.compression import compress_auto
 
-        return data_bytes
+            data_bytes = compress_auto(data_bytes)
+            parameters["compression"] = _detect_compression_name(data_bytes)
+
+        durl: DURL = DURL.build(
+            mime_type=mime_type,
+            data=data_bytes,
+            parameters=parameters or None,
+        )
+        return str(durl).encode("utf-8")
+
+
+def _detect_compression_name(data: bytes) -> str:
+    """Returns compression algorithm name by inspecting magic bytes."""
+    from cachetic.utils.compression import ZSTD_MAGIC
+
+    if data.startswith(ZSTD_MAGIC):
+        return "zstd"
+    return "zlib"
 
 
 def _validate_ttl_value(ttl: int) -> int:

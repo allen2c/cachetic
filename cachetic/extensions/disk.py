@@ -46,3 +46,9 @@ class DiskCacheAdapter(CacheProtocol):
 
     def delete(self, key: str, /) -> None:
         self._cache.delete(key)
+
+    def exists(self, key: str, /) -> bool:
+        return key in self._cache
+
+    def clear(self) -> None:
+        self._cache.clear()
