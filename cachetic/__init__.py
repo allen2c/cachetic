@@ -12,7 +12,6 @@ import urllib.parse
 
 import pydantic
 import pydantic_settings
-from rich.pretty import pretty_repr
 
 if typing.TYPE_CHECKING:
     from cachetic.types.cache_protocol import CacheProtocol
@@ -90,12 +89,22 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
         parsed = urllib.parse.urlparse(self.cache_url)
         if parsed.scheme == "redis":
-            from cachetic.extensions.redis import RedisCacheAdapter
-
+            try:
+                from cachetic.extensions.redis import RedisCacheAdapter
+            except ImportError:
+                raise ImportError(
+                    "Redis support requires the 'redis' package. "
+                    "Install it with: pip install cachetic[redis]"
+                ) from None
             return RedisCacheAdapter(self.cache_url)
         if parsed.scheme.startswith("mongo"):
-            from cachetic.extensions.mongodb import MongoCache
-
+            try:
+                from cachetic.extensions.mongodb import MongoCache
+            except ImportError:
+                raise ImportError(
+                    "MongoDB support requires the 'pymongo' package. "
+                    "Install it with: pip install cachetic[mongodb]"
+                ) from None
             return MongoCache(self.cache_url)
 
         from cachetic.extensions.disk import DiskCacheAdapter
@@ -131,7 +140,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         _key = self.get_cache_key(key, with_prefix=True)
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"[GET] cache: {pretty_repr(_key, max_string=40)}")
+            logger.debug(f"[GET] cache: {repr(_key)}")
         data = self.cache.get(_key)
 
         if data is None:
@@ -181,7 +190,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         _value_bytes = self._dump_any(value)
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"[SET] cache(ex={ex}): {pretty_repr(_key, max_string=40)}")
+            logger.debug(f"[SET] cache(ex={ex}): {repr(_key)}")
         self.cache.set(_key, _value_bytes, ex_params)
 
     def delete(self, key: typing.Text, *args, **kwargs) -> None:
@@ -213,7 +222,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
                     "trying to decompress and validate again. "
                     "Error: %s, Data: %s",
                     e,
-                    pretty_repr(data, max_string=40),
+                    repr(data),
                 )
                 data = decompress_auto(data)
                 return self._validate_any(data)

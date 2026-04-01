@@ -6,7 +6,6 @@ import urllib.parse
 
 import pydantic
 import pymongo
-from str_or_none import str_or_none
 
 from cachetic.types.cache_protocol import CacheProtocol
 from cachetic.types.document_param import DocumentParam
@@ -29,7 +28,7 @@ class MongoCache(CacheProtocol):
 
         The URL must contain a database path and a collection query parameter.
         """
-        __might_url_str = str_or_none(cache_url)
+        __might_url_str: str | None = cache_url.strip() or None
         if __might_url_str is None:
             raise ValueError(f"Invalid mongo url: {cache_url}")
         cache_url = __might_url_str
@@ -42,7 +41,7 @@ class MongoCache(CacheProtocol):
         if not parsed_url.scheme.startswith("mongo"):
             raise ValueError(f"Invalid mongo url: {__safe_url}")
 
-        __db_name = str_or_none(parsed_url.path.strip("/"))
+        __db_name: str | None = parsed_url.path.strip("/") or None
         __query_params = urllib.parse.parse_qs(parsed_url.query)
         __col_names = __query_params.pop("collection", [])
         parsed_url = parsed_url._replace(

@@ -5,7 +5,6 @@ dependencies = [
   "durl-py",
   "pydantic (>=2)",
   "pydantic-settings",
-  "str_or_none",
 ]
 description = "Simple cache with pydantic."
 license = { text = "MIT" }

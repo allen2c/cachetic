@@ -6,13 +6,13 @@ Last reviewed: 2026-04-01
 
 | ID      | Title                                                        | Status | Stopped at |
 |---------|--------------------------------------------------------------|--------|------------|
-| CAC-007 | Unify backend architecture with CacheProtocol adapters       | in-progress | Nearly done; remaining: run existing test suite. Next: CAC-008 (Redis optional) — already half-done since top-level redis import removed |
-| CAC-008 | Make Redis an optional extension                             | todo   | —          |
+| CAC-007 | Unify backend architecture with CacheProtocol adapters       | done | All 40 tests pass. Closed 2026-04-01 |
+| CAC-008 | Make Redis an optional extension                             | done   | Closed 2026-04-01 |
 | CAC-009 | Implement Data URL serialization format with backward compat | todo   | —          |
 | CAC-010 | Implement Postgres backend extension                         | todo   | —          |
 | CAC-011 | Expand CacheProtocol with `exists` and `clear` methods       | todo   | —          |
-| CAC-012 | Make `rich` a conditional import                             | todo   | —          |
-| CAC-013 | Scope `str_or_none` to mongodb optional dependency           | todo   | —          |
+| CAC-012 | Make `rich` a conditional import                             | done   | Closed 2026-04-01 |
+| CAC-013 | Scope `str_or_none` to mongodb optional dependency           | done   | Closed 2026-04-01 |
 
 ## Recently Done
 
