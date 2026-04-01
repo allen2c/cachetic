@@ -10,10 +10,8 @@ import pathlib
 import typing
 import urllib.parse
 
-import diskcache
 import pydantic
 import pydantic_settings
-import redis
 from rich.pretty import pretty_repr
 
 if typing.TYPE_CHECKING:
@@ -43,7 +41,7 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
 
     object_type: pydantic.TypeAdapter[T]
 
-    cache_url: typing.Text | pathlib.Path | redis.Redis | diskcache.Cache
+    cache_url: str | pathlib.Path
     default_ttl: int = pydantic.Field(
         default=-1,
         description=(
@@ -80,32 +78,29 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         return self
 
     @functools.cached_property
-    def cache(
-        self,
-    ) -> typing.Union[diskcache.Cache, redis.Redis, "CacheProtocol"]:
-        """Returns the underlying cache instance based on cache_url.
+    def cache(self) -> "CacheProtocol":
+        """Returns the underlying cache backend as a CacheProtocol.
 
-        Automatically creates Redis or DiskCache instances from URLs or paths.
+        Routes by URL scheme: redis://, mongodb://, or filesystem path.
         """
-        if isinstance(self.cache_url, redis.Redis):
-            return self.cache_url
-        if isinstance(self.cache_url, diskcache.Cache):
-            return self.cache_url
         if isinstance(self.cache_url, pathlib.Path):
-            return diskcache.Cache(self.cache_url)
-        if isinstance(self.cache_url, str):
-            parsed_path = urllib.parse.urlparse(self.cache_url)
-            if parsed_path.scheme == "redis":
-                return redis.Redis.from_url(self.cache_url)
-            elif parsed_path.scheme.startswith("mongo"):
-                from cachetic.extensions.mongodb import MongoCache
+            from cachetic.extensions.disk import DiskCacheAdapter
 
-                __mongo_cache = MongoCache(self.cache_url)
-                return __mongo_cache
+            return DiskCacheAdapter(self.cache_url)
 
-            return diskcache.Cache(self.cache_url)
+        parsed = urllib.parse.urlparse(self.cache_url)
+        if parsed.scheme == "redis":
+            from cachetic.extensions.redis import RedisCacheAdapter
 
-        raise ValueError(f"Unsupported cache url: {self.cache_url}")
+            return RedisCacheAdapter(self.cache_url)
+        if parsed.scheme.startswith("mongo"):
+            from cachetic.extensions.mongodb import MongoCache
+
+            return MongoCache(self.cache_url)
+
+        from cachetic.extensions.disk import DiskCacheAdapter
+
+        return DiskCacheAdapter(self.cache_url)
 
     @property
     def cache_url_safe(self) -> str:

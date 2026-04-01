@@ -1,7 +1,7 @@
 ---
 id: CAC-E03
 title: "v0.7.0: Backend architecture refactor and Data URL format"
-status: todo
+status: in-progress
 priority: high
 created: 2026-04-01
 updated: 2026-04-01
@@ -23,7 +23,7 @@ API call patterns all remain valid.
 
 | ID      | Title                                                        | Status |
 |---------|--------------------------------------------------------------|--------|
-| CAC-007 | Unify backend architecture with CacheProtocol adapters       | todo   |
+| CAC-007 | Unify backend architecture with CacheProtocol adapters       | in-progress |
 | CAC-008 | Make Redis an optional extension                             | todo   |
 | CAC-009 | Implement Data URL serialization format with backward compat | todo   |
 | CAC-010 | Implement Postgres backend extension                         | todo   |

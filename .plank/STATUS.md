@@ -6,7 +6,7 @@ Last reviewed: 2026-04-01
 
 | ID      | Title                                                        | Status | Stopped at |
 |---------|--------------------------------------------------------------|--------|------------|
-| CAC-007 | Unify backend architecture with CacheProtocol adapters       | todo   | Spec complete; start with DiskCache adapter + CacheProtocol positional-only `/` verification |
+| CAC-007 | Unify backend architecture with CacheProtocol adapters       | in-progress | Nearly done; remaining: run existing test suite. Next: CAC-008 (Redis optional) — already half-done since top-level redis import removed |
 | CAC-008 | Make Redis an optional extension                             | todo   | —          |
 | CAC-009 | Implement Data URL serialization format with backward compat | todo   | —          |
 | CAC-010 | Implement Postgres backend extension                         | todo   | —          |

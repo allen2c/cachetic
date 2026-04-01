@@ -1,12 +1,17 @@
-# cachetic/types/cache_protocol.py
+"""Structural protocol for cache backends.
+
+All backends (DiskCache, Redis, MongoDB, Postgres) implement this protocol.
+Positional-only `/` enables structural subtyping regardless of parameter names.
+"""
+
 import typing
 
 
 class CacheProtocol(typing.Protocol):
-    def set(
-        self, name: str, value: bytes, ex: typing.Optional[int] = None, *args, **kwargs
-    ) -> None: ...
+    """Minimal cache interface: get, set, delete with bytes values."""
 
-    def get(self, name: str, *args, **kwargs) -> typing.Optional[bytes]: ...
+    def set(self, key: str, value: bytes, ex: int | None = None, /) -> None: ...
 
-    def delete(self, name: str, *args, **kwargs) -> None: ...
+    def get(self, key: str, /) -> bytes | None: ...
+
+    def delete(self, key: str, /) -> None: ...
