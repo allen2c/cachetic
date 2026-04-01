@@ -29,3 +29,8 @@ def redis_connection_string():
 @pytest.fixture(scope="module")
 def mongo_connection_string():
     return "mongodb://localhost:27017/cachetic?collection=test"
+
+
+@pytest.fixture(scope="module")
+def postgres_connection_string():
+    return "postgresql://postgres:postgres@localhost:5432/cachetic?table=test_cache"

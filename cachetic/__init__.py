@@ -106,6 +106,15 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
                     "Install it with: pip install cachetic[mongodb]"
                 ) from None
             return MongoCache(self.cache_url)
+        if parsed.scheme.startswith("postgres"):
+            try:
+                from cachetic.extensions.postgres import PostgresCache
+            except ImportError:
+                raise ImportError(
+                    "PostgreSQL support requires 'peewee' and 'psycopg'. "
+                    "Install with: pip install cachetic[postgres]"
+                ) from None
+            return PostgresCache(self.cache_url)
 
         from cachetic.extensions.disk import DiskCacheAdapter
 

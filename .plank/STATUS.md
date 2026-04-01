@@ -6,13 +6,13 @@ Last reviewed: 2026-04-01
 
 | ID      | Title                                                           | Status | Stopped at |
 |---------|-----------------------------------------------------------------|--------|------------|
-| CAC-010 | Implement Postgres backend extension                            | todo   | —          |
 | CAC-014 | Add version compatibility tests for Data URL and legacy formats | todo   | —          |
 
 ## Recently Done
 
 | ID      | Title                                                                    | Completed  |
 |---------|--------------------------------------------------------------------------|------------|
+| CAC-010 | Implement Postgres backend extension                                     | 2026-04-01 |
 | CAC-007 | Unify backend architecture with CacheProtocol adapters                   | 2026-04-01 |
 | CAC-008 | Make Redis an optional extension                                         | 2026-04-01 |
 | CAC-009 | Implement Data URL serialization format with backward compat             | 2026-04-01 |

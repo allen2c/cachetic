@@ -26,7 +26,7 @@ API call patterns all remain valid.
 | CAC-007 | Unify backend architecture with CacheProtocol adapters       | done   |
 | CAC-008 | Make Redis an optional extension                             | done   |
 | CAC-009 | Implement Data URL serialization format with backward compat | done   |
-| CAC-010 | Implement Postgres backend extension                         | todo   |
+| CAC-010 | Implement Postgres backend extension                         | done   |
 | CAC-011 | Expand CacheProtocol with `exists` and `clear` methods       | done   |
 | CAC-012 | Make `rich` a conditional import                             | done   |
 | CAC-013 | Scope `str_or_none` to mongodb optional dependency           | done   |
