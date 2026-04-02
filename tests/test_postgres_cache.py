@@ -30,9 +30,9 @@ def test_postgres_cache_set_get(postgres_connection_string: str):
         cache_url=postgres_connection_string,
         default_ttl=15 * 60,
     )
-    cache.clear()
     key = "test_person"
     value = Person(name="Alice", age=30)
+    cache.delete(key)
     ex = 2
 
     result = cache.get(key)
@@ -64,16 +64,16 @@ def test_postgres_cache_set_get(postgres_connection_string: str):
     assert res is None
 
 
-def test_postgres_exists_and_clear(postgres_connection_string: str):
-    """Tests exists() with lazy expiry and clear()."""
+def test_postgres_exists(postgres_connection_string: str):
+    """Tests exists() with lazy expiry."""
     cache = Cachetic[Person](
         object_type=pydantic.TypeAdapter(Person),
         cache_url=postgres_connection_string,
         default_ttl=-1,
     )
-    cache.clear()
     key = "exist_test"
     value = Person(name="Bob", age=25)
+    cache.delete(key)
 
     assert cache.exists(key) is False
 
@@ -83,12 +83,6 @@ def test_postgres_exists_and_clear(postgres_connection_string: str):
     cache.set(key, value, ex=1)
     time.sleep(2)
     assert cache.exists(key) is False
-
-    cache.set("a", value)
-    cache.set("b", value)
-    cache.clear()
-    assert cache.get("a") is None
-    assert cache.get("b") is None
 
 
 # --- Connection reuse tests ---

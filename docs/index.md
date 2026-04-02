@@ -13,7 +13,7 @@ Type-safe caching for Python — multiple backends, Pydantic serialization, zero
 - **Self-describing format** — [Data URL](https://developer.mozilla.org/en-US/docs/Web/URI/Schemes/data) serialization carries its own compression metadata (v0.7.0)
 - **Compression** — optional zstd / zlib with automatic detection
 - **Connection pooling** — shared connections and deduplicated DDL across all backends
-- **Complete API** — `get`, `set`, `delete`, `exists`, `clear` with optional TTL
+- **Complete API** — `get`, `set`, `delete`, `exists` with optional TTL
 
 ## Installation
 
@@ -44,7 +44,6 @@ cache.set("user:1", Person(name="Alice", age=30))
 result = cache.get("user:1")   # Person(name='Alice', age=30)
 cache.exists("user:1")         # True
 cache.delete("user:1")
-cache.clear()
 ```
 
 ## Backends
@@ -181,7 +180,6 @@ export CACHETIC_COMPRESSION=true
 | `set(key, value, ex=None)`    | `None`        | Store value with optional TTL          |
 | `delete(key)`                 | `None`        | Remove a key                           |
 | `exists(key)`                 | `bool`        | Check if a key exists                  |
-| `clear()`                     | `None`        | Remove all entries from the backend    |
 
 ```python
 from cachetic import CacheNotFoundError

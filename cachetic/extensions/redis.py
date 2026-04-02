@@ -44,6 +44,3 @@ class RedisCacheAdapter(CacheProtocol):
 
     def exists(self, key: str, /) -> bool:
         return self._client.exists(key) > 0
-
-    def clear(self) -> None:
-        self._client.flushdb()

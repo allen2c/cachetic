@@ -142,7 +142,3 @@ class PostgresCache(CacheProtocol):
             self._model.delete().where(self._model.name == key).execute()
             return False
         return True
-
-    def clear(self) -> None:
-        """Removes all entries from the cache table."""
-        self._model.delete().execute()

@@ -8,7 +8,7 @@ import typing
 
 
 class CacheProtocol(typing.Protocol):
-    """Cache backend interface: get, set, delete, exists, clear."""
+    """Cache backend interface: get, set, delete, exists."""
 
     def set(self, key: str, value: bytes, ex: int | None = None, /) -> None: ...
 
@@ -17,5 +17,3 @@ class CacheProtocol(typing.Protocol):
     def delete(self, key: str, /) -> None: ...
 
     def exists(self, key: str, /) -> bool: ...
-
-    def clear(self) -> None: ...

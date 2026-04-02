@@ -150,7 +150,3 @@ class MongoCache(CacheProtocol):
             self.col.delete_one({"name": name})
             return False
         return True
-
-    def clear(self) -> None:
-        """Removes all documents from the cache collection."""
-        self.col.delete_many({})

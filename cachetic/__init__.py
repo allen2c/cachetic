@@ -212,10 +212,6 @@ class Cachetic(pydantic_settings.BaseSettings, typing.Generic[T]):
         _key = self.get_cache_key(key, with_prefix=True)
         return self.cache.exists(_key)
 
-    def clear(self) -> None:
-        """Removes all entries from the cache backend."""
-        self.cache.clear()
-
     def _validate_any(self, data: typing.Any) -> T:
         if self._is_bytes_type:
             return self.object_type.validate_python(data)
