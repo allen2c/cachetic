@@ -1,7 +1,7 @@
 ---
 id: CAC-E03
 title: "v0.7.0: Backend architecture refactor and Data URL format"
-status: in-progress
+status: done
 priority: high
 created: 2026-04-01
 updated: 2026-04-01
@@ -30,4 +30,4 @@ API call patterns all remain valid.
 | CAC-011 | Expand CacheProtocol with `exists` and `clear` methods       | done   |
 | CAC-012 | Make `rich` a conditional import                             | done   |
 | CAC-013 | Scope `str_or_none` to mongodb optional dependency           | done   |
-| CAC-014 | Add version compatibility tests for Data URL and legacy formats | todo   |
+| CAC-014 | Add version compatibility tests for Data URL and legacy formats | done   |

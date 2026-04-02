@@ -1,17 +1,19 @@
 # Cachetic — STATUS
 
-Last reviewed: 2026-04-01
+Last reviewed: 2026-04-02
 
 ## Active
 
 | ID      | Title                                                           | Status | Stopped at |
 |---------|-----------------------------------------------------------------|--------|------------|
-| CAC-014 | Add version compatibility tests for Data URL and legacy formats | todo   | —          |
+
+(none)
 
 ## Recently Done
 
 | ID      | Title                                                                    | Completed  |
 |---------|--------------------------------------------------------------------------|------------|
+| CAC-014 | Add version compatibility tests for Data URL and legacy formats          | 2026-04-01 |
 | CAC-010 | Implement Postgres backend extension                                     | 2026-04-01 |
 | CAC-007 | Unify backend architecture with CacheProtocol adapters                   | 2026-04-01 |
 | CAC-008 | Make Redis an optional extension                                         | 2026-04-01 |

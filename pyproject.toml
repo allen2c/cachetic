@@ -30,6 +30,7 @@ pymongo = "*"
 pytest = "*"
 redis = "*"
 rich = "*"
+zstandard = "*"
 
 [tool.isort]
 profile = "black"
