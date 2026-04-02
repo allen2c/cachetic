@@ -4,187 +4,125 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/cachetic.svg)](https://pypi.org/project/cachetic/)
 [![License](https://img.shields.io/pypi/l/cachetic.svg)](https://opensource.org/licenses/MIT)
 
-A simple, type-safe caching library supporting Redis and disk storage with automatic Pydantic serialization.
+Type-safe caching for Python — multiple backends, Pydantic serialization, zero boilerplate.
 
 ## Features
 
-- **Type-safe**: Full type checking with generic support
-- **Flexible backends**: Local disk cache (diskcache), Redis, or MongoDB
-- **Pydantic integration**: Automatic serialization for any type via TypeAdapter
-- **Compression support**: Optional zstd/zlib compression with automatic detection
-- **Connection pooling**: Shared MongoClient instances and deduplicated index creation (v0.6.0)
-- **Simple API**: Just `get()` and `set()` with optional TTL
+- **4 backends** — disk ([diskcache](https://github.com/grantjenks/python-diskcache)), Redis, MongoDB, PostgreSQL
+- **Type-safe** — generic `Cachetic[T]` with full `TypeAdapter` support
+- **Self-describing format** — [Data URL](https://developer.mozilla.org/en-US/docs/Web/URI/Schemes/data) serialization carries its own compression metadata (v0.7.0)
+- **Compression** — optional zstd / zlib with automatic detection
+- **Connection pooling** — shared connections and deduplicated DDL across all backends
+- **Complete API** — `get`, `set`, `delete`, `exists`, `clear` with optional TTL
 
 ## Installation
 
 ```bash
-pip install cachetic
+pip install cachetic                  # disk backend included
+pip install cachetic[redis]           # + Redis
+pip install cachetic[mongodb]         # + MongoDB
+pip install cachetic[postgres]        # + PostgreSQL (peewee + psycopg3)
+pip install cachetic zstandard        # + zstd compression
 ```
 
 ## Quick Start
-
-### Basic Usage
 
 ```python
 import pydantic
 from cachetic import Cachetic
 
-# Define your model
 class Person(pydantic.BaseModel):
     name: str
     age: int
 
-# Create cache instance
-cache = Cachetic[Person](
-    object_type=pydantic.TypeAdapter(Person),
-    cache_url=".cache"  # Local disk cache
-)
-
-# Store and retrieve
-person = Person(name="Alice", age=30)
-cache.set("user:1", person)
-
-result = cache.get("user:1")
-print(result.name)  # "Alice"
-```
-
-### Redis Backend
-
-```python
-cache = Cachetic[Person](
-    object_type=pydantic.TypeAdapter(Person),
-    cache_url="redis://localhost:6379/0"
-)
-```
-
-### MongoDB Backend
-
-```python
-pip install cachetic[mongodb]
-```
-
-```python
-cache = Cachetic[Person](
-    object_type=pydantic.TypeAdapter(Person),
-    cache_url="mongodb://localhost:27017/mydb?collection=mycache"
-)
-```
-
-Multiple `Cachetic` instances sharing the same MongoDB connection string automatically
-reuse a single `MongoClient`, avoiding repeated authentication handshakes and redundant
-index creation.
-
-### Primitive Types
-
-```python
-# String cache
-str_cache = Cachetic[str](
-    object_type=pydantic.TypeAdapter(str),
-    cache_url=".cache"
-)
-
-str_cache.set("greeting", "Hello, World!")
-print(str_cache.get("greeting"))  # "Hello, World!"
-
-# List cache
-list_cache = Cachetic[list[str]](
-    object_type=pydantic.TypeAdapter(list[str]),
-    cache_url=".cache"
-)
-
-list_cache.set("items", ["apple", "banana", "cherry"])
-```
-
-### Complex Types
-
-```python
-from typing import Dict, List
-
-# Dictionary cache
-data = {"users": [{"id": 1, "name": "Alice"}], "total": 1}
-dict_cache = Cachetic[Dict](
-    object_type=pydantic.TypeAdapter(Dict),
-    cache_url=".cache"
-)
-
-dict_cache.set("user_data", data)
-
-# List of models
-people_cache = Cachetic[List[Person]](
-    object_type=pydantic.TypeAdapter(List[Person]),
-    cache_url=".cache"
-)
-
-people = [Person(name="Alice", age=30), Person(name="Bob", age=25)]
-people_cache.set("team", people)
-```
-
-### Compression Support
-
-Enable compression to reduce storage space and bandwidth usage:
-
-```python
-# Enable compression (auto-selects best algorithm)
 cache = Cachetic[Person](
     object_type=pydantic.TypeAdapter(Person),
     cache_url=".cache",
-    compression=True  # New in v0.5.0
 )
 
-person = Person(name="Alice", age=30)
-cache.set("user:1", person)  # Automatically compressed
-result = cache.get("user:1")  # Automatically decompressed
+cache.set("user:1", Person(name="Alice", age=30))
+result = cache.get("user:1")   # Person(name='Alice', age=30)
+cache.exists("user:1")         # True
+cache.delete("user:1")
+cache.clear()
 ```
 
-**Compression Algorithms:**
+## Backends
 
-- **zstd** (preferred): Used if `zstandard` package is installed
-- **zlib** (fallback): Built-in Python standard library
+### Disk (default)
 
-**Automatic Detection:**
+Any local path — string or `pathlib.Path`:
 
-- Caches with `compression=False` can still read compressed data
-- Automatic decompression occurs when compressed data is detected
-- Seamless migration between compressed and uncompressed caches
-
-**Installation with zstd support:**
-
-```bash
-pip install cachetic zstandard
+```python
+cache = Cachetic[Person](object_type=pydantic.TypeAdapter(Person), cache_url=".cache")
 ```
+
+### Redis
+
+```python
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url="redis://localhost:6379/0",
+)
+```
+
+### MongoDB
+
+```python
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url="mongodb://localhost:27017/mydb?collection=mycache",
+)
+```
+
+### PostgreSQL
+
+```python
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url="postgresql://user:pass@localhost:5432/mydb",
+)
+```
+
+> All four backends share connections automatically — multiple `Cachetic` instances with
+> the same URL reuse a single underlying client and skip redundant DDL / index creation.
+
+## Compression
+
+```python
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url=".cache",
+    compression=True,
+)
+```
+
+- **zstd** (preferred) — install `zstandard`
+- **zlib** (fallback) — Python standard library
+
+Readers auto-detect compressed data regardless of their own `compression` setting, so
+you can freely mix compressed and uncompressed writers.
 
 ## Configuration
 
-### Constructor Parameters
+| Parameter     | Type                   | Default | Description                              |
+|---------------|------------------------|---------|------------------------------------------|
+| `object_type` | `TypeAdapter[T]`       | —       | Pydantic type adapter for serialization  |
+| `cache_url`   | `str \| pathlib.Path`  | —       | Backend URL or local path                |
+| `default_ttl` | `int`                  | `-1`    | TTL in seconds (`-1` = no expiry)        |
+| `prefix`      | `str`                  | `""`    | Key prefix for all operations            |
+| `compression` | `bool`                 | `False` | Compress values before storage           |
 
-- **`object_type`**: `pydantic.TypeAdapter[T]` - Required type adapter for serialization
-- **`cache_url`**: Cache backend - file path for disk cache, `redis://...` for Redis, or `mongodb://...` for MongoDB
-- **`default_ttl`**: Default expiration in seconds (`-1` = no expiration, `0` = disabled)
-- **`prefix`**: Key prefix for all cache operations
-- **`compression`**: Enable compression for cached values (default: `False`)
-
-### TTL Examples
+### TTL
 
 ```python
-# No expiration (default)
-cache = Cachetic[str](
-    object_type=pydantic.TypeAdapter(str),
-    default_ttl=-1
-)
-
-# 1 hour expiration
-cache = Cachetic[str](
-    object_type=pydantic.TypeAdapter(str),
-    default_ttl=3600
-)
-
-# Per-operation TTL
-cache.set("key", "value", ex=300)  # 5 minutes
+cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), default_ttl=3600)  # 1h
+cache.set("key", "value", ex=300)  # per-call override: 5 min
 ```
 
 ### Environment Variables
 
-Use `CACHETIC_` prefix:
+All fields accept `CACHETIC_` prefixed env vars:
 
 ```bash
 export CACHETIC_CACHE_URL="redis://localhost:6379/0"
@@ -193,21 +131,24 @@ export CACHETIC_PREFIX="myapp"
 export CACHETIC_COMPRESSION=true
 ```
 
-## Error Handling
+## API Reference
+
+| Method                        | Returns       | Description                            |
+|-------------------------------|---------------|----------------------------------------|
+| `get(key)`                    | `T \| None`   | Retrieve value, or `None` on miss      |
+| `get_or_raise(key)`           | `T`           | Retrieve value, or raise on miss       |
+| `set(key, value, ex=None)`    | `None`        | Store value with optional TTL          |
+| `delete(key)`                 | `None`        | Remove a key                           |
+| `exists(key)`                 | `bool`        | Check if a key exists                  |
+| `clear()`                     | `None`        | Remove all entries from the backend    |
 
 ```python
 from cachetic import CacheNotFoundError
 
-# get() returns None for missing keys
-result = cache.get("nonexistent")  # None
-
-# get_or_raise() throws exception
-try:
-    result = cache.get_or_raise("nonexistent")
-except CacheNotFoundError:
-    print("Key not found")
+result = cache.get("missing")          # None
+cache.get_or_raise("missing")          # raises CacheNotFoundError
 ```
 
 ## License
 
-MIT License
+MIT
