@@ -30,6 +30,7 @@ pymongo = "*"
 pytest = "*"
 redis = "*"
 rich = "*"
+ruff = "*"
 zstandard = "*"
 
 [tool.isort]
