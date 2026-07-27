@@ -2,6 +2,7 @@ import time
 from pprint import pformat
 from unittest.mock import patch
 
+import peewee
 import pydantic
 
 from cachetic import Cachetic
@@ -111,6 +112,71 @@ def test_different_table_shares_db(postgres_connection_string: str):
         assert a._db is b._db
         assert len(_db_registry) == 1
     finally:
+        _clear_postgres_registries()
+
+
+def _describe_table(db: peewee.PostgresqlDatabase, table: str) -> list[tuple]:
+    """Returns (column, type, nullability, position) rows from information_schema."""
+    cursor = db.execute_sql(
+        "SELECT column_name, data_type, is_nullable, ordinal_position "
+        "FROM information_schema.columns WHERE table_name = %s "
+        "ORDER BY ordinal_position",
+        (table,),
+    )
+    return list(cursor.fetchall())
+
+
+def test_async_ddl_matches_sync_ddl(postgres_connection_string: str):
+    """The async backend must create exactly the table peewee creates.
+
+    Both sides use CREATE TABLE IF NOT EXISTS, so whichever connects first wins
+    and a mismatch diverges silently instead of raising. Comparing the realised
+    schemas is the only thing that catches it.
+    """
+    import asyncio
+
+    from cachetic.aio import close_all
+    from cachetic.extensions.aio.postgres import AsyncPostgresCache
+
+    _clear_postgres_registries()
+    sync_table = "ddl_check_sync"
+    async_table = "ddl_check_async"
+
+    sync_url = postgres_connection_string.replace(
+        "table=test_cache", f"table={sync_table}"
+    )
+    async_url = postgres_connection_string.replace(
+        "table=test_cache", f"table={async_table}"
+    )
+
+    try:
+        sync_cache = PostgresCache(sync_url)
+        db = sync_cache._db
+        db.execute_sql(f'DROP TABLE IF EXISTS "{sync_table}"')
+        db.execute_sql(f'DROP TABLE IF EXISTS "{async_table}"')
+        _clear_postgres_registries()
+
+        # Recreate the sync table through peewee.
+        sync_cache = PostgresCache(sync_url)
+
+        async def build_async_table() -> None:
+            cache = AsyncPostgresCache(async_url)
+            await cache._ensure_table()
+            await close_all()
+
+        asyncio.run(build_async_table())
+
+        sync_schema = _describe_table(db, sync_table)
+        async_schema = _describe_table(db, async_table)
+
+        assert sync_schema, "sync table was not created"
+        assert async_schema == sync_schema
+        assert [row[0] for row in async_schema] == ["name", "value", "expires_at"]
+        assert [row[2] for row in async_schema] == ["NO", "NO", "YES"]
+    finally:
+        db = PostgresCache(sync_url)._db
+        db.execute_sql(f'DROP TABLE IF EXISTS "{sync_table}"')
+        db.execute_sql(f'DROP TABLE IF EXISTS "{async_table}"')
         _clear_postgres_registries()
 
 

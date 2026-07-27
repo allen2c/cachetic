@@ -14,8 +14,8 @@ requires-python = ">=3.11,<4"
 version = "0.7.0"
 
 [project.optional-dependencies]
-mongodb = ["pymongo (>=4)"]
-postgres = ["peewee", "psycopg[binary]"]
+mongodb = ["pymongo (>=4.9)"] # 4.9 introduced AsyncMongoClient
+postgres = ["peewee", "psycopg-pool", "psycopg[binary]"]
 redis = ["redis (>=5)"]
 
 [tool.poetry.group.dev.dependencies]
@@ -26,19 +26,50 @@ mkdocs-material = "*"
 peewee = "*"
 poetry-plugin-export = "*"
 psycopg = { extras = ["binary"], version = "*" }
+psycopg-pool = "*"
 pymongo = "*"
 pytest = "*"
+pytest-asyncio = "*"
 redis = "*"
 rich = "*"
 ruff = "*"
 zstandard = "*"
 
+[tool.black]
+target-version = ["py311"]
+
 [tool.isort]
 profile = "black"
 
-[tool.flake8]
-ignore = ["E203", "E704", "W503"]
-max-line-length = 88
+# Pin the rule set explicitly: without this, ruff's defaults drift between
+# releases and CI can start failing on untouched code.
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = [
+  "E203",   # whitespace before ':' — conflicts with black
+  "RUF002", # en/em dashes are used deliberately in docstring prose
+  "TRY003", # long messages outside exception classes — install hints are a feature
+  "TRY400", # logging.error in except — .exception would duplicate the traceback
+]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "PIE", # flake8-pie
+  "RET", # flake8-return
+  "RUF", # ruff-specific
+  "TRY", # tryceratops
+  "UP",  # pyupgrade
+  "W",   # pycodestyle warnings
+]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

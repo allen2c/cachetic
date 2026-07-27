@@ -1,12 +1,17 @@
+"""MongoDB adapter for CacheProtocol.
+
+Reuses MongoClient instances per connection URL and ensures the unique index on
+``name`` only once per (database, collection) pair.
+"""
+
 import logging
 import math
 import time
-import typing
-import urllib.parse
 
 import pydantic
 import pymongo
 
+from cachetic.extensions._url import MongoUrlParts, parse_mongo_url
 from cachetic.types.cache_protocol import CacheProtocol
 from cachetic.types.document_param import DocumentParam
 from cachetic.utils.hide_url_password import hide_url_password
@@ -14,10 +19,10 @@ from cachetic.utils.hide_url_password import hide_url_password
 logger = logging.getLogger(__name__)
 
 # CAC-001: Module-level registry to share MongoClient instances per connection URL
-_client_registry: typing.Dict[str, pymongo.MongoClient] = {}
+_client_registry: dict[str, pymongo.MongoClient] = {}
 
 # CAC-002: Track (db, collection) pairs that already had their indexes ensured
-_ensured_indexes: typing.Set[typing.Tuple[str, str]] = set()
+_ensured_indexes: set[tuple[str, str]] = set()
 
 
 class MongoCache(CacheProtocol):
@@ -28,125 +33,98 @@ class MongoCache(CacheProtocol):
 
         The URL must contain a database path and a collection query parameter.
         """
-        __might_url_str: str | None = cache_url.strip() or None
-        if __might_url_str is None:
-            raise ValueError(f"Invalid mongo url: {cache_url}")
-        cache_url = __might_url_str
+        parts: MongoUrlParts = parse_mongo_url(cache_url)
+        safe_url: str = hide_url_password(parts.db_url)
 
-        parsed_url = urllib.parse.urlparse(cache_url)
-        __safe_url = hide_url_password(str(cache_url))
-
-        logger.debug(f"Initializing MongoCache with URL: {__safe_url}")
-
-        if not parsed_url.scheme.startswith("mongo"):
-            raise ValueError(f"Invalid mongo url: {__safe_url}")
-
-        __db_name: str | None = parsed_url.path.strip("/") or None
-        __query_params = urllib.parse.parse_qs(parsed_url.query)
-        __col_names = __query_params.pop("collection", [])
-        parsed_url = parsed_url._replace(
-            query=urllib.parse.urlencode(__query_params, doseq=True)
-        )
-        __db_url = urllib.parse.urlunparse(parsed_url)
-
-        if __db_name is None:
-            raise ValueError(
-                f"Invalid mongo url: {__safe_url}, "
-                + "must provide database name in path"
-            )
-        if len(__col_names) == 0:
-            raise ValueError(
-                f"Invalid mongo url: {__safe_url}, "
-                + "must provide 'collection' name in query"
-            )
-        if len(__col_names) >= 2:
-            logger.warning(
-                f"Got multiple collection names in mongo url: {__safe_url}, "
-                + "only the first one will be used"
-            )
-
-        __col_name = __col_names[0]
+        logger.debug(f"Initializing MongoCache with URL: {safe_url}")
 
         # CAC-001: Reuse MongoClient from registry if available
-        if __db_url in _client_registry:
-            __mongo_client = _client_registry[__db_url]
-            logger.debug(f"Reusing existing MongoClient for: {__safe_url}")
+        if parts.db_url in _client_registry:
+            mongo_client = _client_registry[parts.db_url]
+            logger.debug(f"Reusing existing MongoClient for: {safe_url}")
         else:
-            __mongo_client = pymongo.MongoClient(__db_url, document_class=DocumentParam)
-            _client_registry[__db_url] = __mongo_client
-            logger.debug(f"Created new MongoClient for: {__safe_url}")
+            mongo_client = pymongo.MongoClient(
+                parts.db_url, document_class=DocumentParam
+            )
+            _client_registry[parts.db_url] = mongo_client
+            logger.debug(f"Created new MongoClient for: {safe_url}")
 
-        __db = __mongo_client[__db_name]
-        __col = __db[__col_name]
+        db = mongo_client[parts.database]
+        col = db[parts.collection]
 
         # CAC-002: Only ensure index once per (db, collection) pair
-        __index_key = (__db_name, __col_name)
-        if __index_key not in _ensured_indexes:
-            __col.create_index("name", unique=True)
-            _ensured_indexes.add(__index_key)
-            logger.debug(f"Ensured unique index on 'name' in collection: {__col_name}")
+        index_key = (parts.database, parts.collection)
+        if index_key not in _ensured_indexes:
+            col.create_index("name", unique=True)
+            _ensured_indexes.add(index_key)
+            logger.debug(
+                f"Ensured unique index on 'name' in collection: {parts.collection}"
+            )
 
-        self.cache_url = pydantic.SecretStr(__db_url)
-        self.client = __mongo_client
-        self.db = __db
-        self.col = __col
+        self.cache_url = pydantic.SecretStr(parts.db_url)
+        self.client = mongo_client
+        self.db = db
+        self.col = col
 
-    def set(
-        self, name: str, value: bytes, ex: typing.Optional[int] = None, *args, **kwargs
-    ) -> None:
-        """Sets a key-value pair, with an optional expiration in seconds."""
-        _ex = None if ex is None or ex < 1 else math.ceil(ex)
-        if _ex is not None:
-            _ex = int(time.time()) + _ex
+    def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
+        """Sets a key-value pair, with an optional expiration in seconds.
+
+        The deadline is whole-second and derived from a truncated clock, so an
+        entry may outlive its TTL by up to a second. See
+        ``CacheticBase._ttl_to_expiry`` for why that is accepted.
+        """
+        expires_at = None if ex is None or ex < 1 else int(time.time()) + math.ceil(ex)
 
         logger.debug(
-            f"[MongoCache.set] Setting key='{name}', "
+            f"[MongoCache.set] Setting key='{key}', "
             f"value_size={len(value) if hasattr(value, '__len__') else 'unknown'}, "
-            f"ex={_ex}"
+            f"ex={expires_at}"
         )
 
         self.col.update_one(
-            {"name": name}, {"$set": {"value": value, "ex": _ex}}, upsert=True
+            {"name": key}, {"$set": {"value": value, "ex": expires_at}}, upsert=True
         )
 
-    def get(self, name: str, *args, **kwargs) -> typing.Optional[bytes]:
+    def get(self, key: str, /) -> bytes | None:
         """Retrieves a value by key.
 
         Returns None if the key doesn't exist or has expired.
         """
-        logger.debug(f"[MongoCache.get] Getting key='{name}'")
-        _doc = self.col.find_one({"name": name})
+        logger.debug(f"[MongoCache.get] Getting key='{key}'")
+        doc: DocumentParam | None = self.col.find_one({"name": key})
 
-        if _doc is None:
-            logger.debug(f"[MongoCache.get] Key='{name}' not found.")
+        if doc is None:
+            logger.debug(f"[MongoCache.get] Key='{key}' not found.")
             return None
 
-        if _doc["ex"] is None:
-            logger.debug(f"[MongoCache.get] Key='{name}' found (no expiration).")
-            return _doc["value"]
+        expires_at: int | None = doc["ex"]
+        if expires_at is None:
+            logger.debug(f"[MongoCache.get] Key='{key}' found (no expiration).")
+            return doc["value"]
 
-        if _doc["ex"] < int(time.time()):
+        if expires_at < int(time.time()):
             logger.debug(
-                f"[MongoCache.get] Key='{name}' expired at {_doc['ex']}, "
+                f"[MongoCache.get] Key='{key}' expired at {expires_at}, "
                 f"now={int(time.time())}. Deleting."
             )
-            self.col.delete_one({"name": name})
+            self.col.delete_one({"name": key})
             return None
 
-        logger.debug(f"[MongoCache.get] Key='{name}' found and valid.")
-        return _doc["value"]
+        logger.debug(f"[MongoCache.get] Key='{key}' found and valid.")
+        return doc["value"]
 
-    def delete(self, name: str, *args, **kwargs) -> None:
+    def delete(self, key: str, /) -> None:
         """Deletes a key-value pair from the cache."""
-        logger.debug(f"[MongoCache.delete] Deleting key='{name}'")
-        self.col.delete_one({"name": name})
+        logger.debug(f"[MongoCache.delete] Deleting key='{key}'")
+        self.col.delete_one({"name": key})
 
-    def exists(self, name: str, *args, **kwargs) -> bool:
+    def exists(self, key: str, /) -> bool:
         """Checks if a key exists and has not expired."""
-        doc: dict[str, typing.Any] | None = self.col.find_one({"name": name})
+        doc: DocumentParam | None = self.col.find_one({"name": key})
         if doc is None:
             return False
-        if doc["ex"] is not None and doc["ex"] < int(time.time()):
-            self.col.delete_one({"name": name})
+        expires_at: int | None = doc["ex"]
+        if expires_at is not None and expires_at < int(time.time()):
+            self.col.delete_one({"name": key})
             return False
         return True

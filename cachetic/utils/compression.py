@@ -32,7 +32,7 @@ def might_compressed(data: bytes) -> bool:
     """
     Checks if the data might be compressed.
     """
-    return data.startswith(ZSTD_MAGIC) or data.startswith(ZLIB_MAGIC)
+    return data.startswith((ZSTD_MAGIC, ZLIB_MAGIC))
 
 
 def compress_auto(
@@ -68,9 +68,8 @@ def compress_auto(
     # Execute compression
     if use_zstd:
         return _ZSTD_COMPRESSOR.compress(data)
-    else:
-        # level=6 is zlib default balance
-        return zlib.compress(data, level=6)
+    # level=6 is zlib default balance
+    return zlib.compress(data, level=6)
 
 
 def decompress_auto(data: bytes) -> bytes:
@@ -109,8 +108,8 @@ def decompress_auto(data: bytes) -> bytes:
         try:
             return _ZSTD_DECOMPRESSOR.decompress(data)
         except Exception as e:
-            logger.error(f"Detect Zstd header but decompression failed: {str(e)}")
-            raise DecompressionError(f"Zstd decompression failed: {str(e)}") from e
+            logger.error(f"Detect Zstd header but decompression failed: {e!s}")
+            raise DecompressionError(f"Zstd decompression failed: {e!s}") from e
 
     # 2. Zlib Detection (Medium Confidence)
     if data.startswith(ZLIB_MAGIC):

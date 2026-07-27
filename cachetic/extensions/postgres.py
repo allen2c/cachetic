@@ -8,16 +8,14 @@ import logging
 import math
 import time
 import typing
-import urllib.parse
 
 import peewee
 
+from cachetic.extensions._url import PostgresUrlParts, parse_postgres_url
 from cachetic.types.cache_protocol import CacheProtocol
 from cachetic.utils.hide_url_password import hide_url_password
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_TABLE: str = "cachetic_cache"
 
 _db_registry: dict[str, peewee.PostgresqlDatabase] = {}
 _ensured_tables: set[tuple[str, str]] = set()
@@ -48,38 +46,21 @@ class PostgresCache(CacheProtocol):
     _model: type[peewee.Model]
 
     def __init__(self, cache_url: str) -> None:
-        parsed: urllib.parse.ParseResult = urllib.parse.urlparse(cache_url)
+        parts: PostgresUrlParts = parse_postgres_url(cache_url)
         safe_url: str = hide_url_password(cache_url)
-
-        if not parsed.scheme.startswith("postgres"):
-            raise ValueError(f"Invalid postgres URL: {safe_url}")
-
-        db_name: str = parsed.path.strip("/")
-        if not db_name:
-            raise ValueError(
-                f"Invalid postgres URL: {safe_url}, "
-                "must provide database name in path"
-            )
-
-        query_params: dict[str, list[str]] = urllib.parse.parse_qs(parsed.query)
-        table_names: list[str] = query_params.pop("table", [_DEFAULT_TABLE])
-        table_name: str = table_names[0]
-
-        clean_parsed: urllib.parse.ParseResult = parsed._replace(
-            query=urllib.parse.urlencode(query_params, doseq=True)
-        )
-        db_url: str = urllib.parse.urlunparse(clean_parsed)
+        db_url: str = parts.db_url
+        table_name: str = parts.table
 
         if db_url in _db_registry:
             db = _db_registry[db_url]
             logger.debug("Reusing existing Postgres connection for: %s", safe_url)
         else:
             db = peewee.PostgresqlDatabase(
-                db_name,
-                host=parsed.hostname,
-                port=parsed.port or 5432,
-                user=urllib.parse.unquote(parsed.username or ""),
-                password=urllib.parse.unquote(parsed.password or ""),
+                parts.database,
+                host=parts.host,
+                port=parts.port,
+                user=parts.user,
+                password=parts.password,
             )
             _db_registry[db_url] = db
             logger.debug("Created new Postgres connection for: %s", safe_url)
@@ -96,7 +77,12 @@ class PostgresCache(CacheProtocol):
         self._model = model
 
     def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
-        """Stores a value with optional TTL (seconds from now)."""
+        """Stores a value with optional TTL (seconds from now).
+
+        The deadline is whole-second and derived from a truncated clock, so an
+        entry may outlive its TTL by up to a second. See
+        ``CacheticBase._ttl_to_expiry`` for why that is accepted.
+        """
         expires_at: int | None = None
         if ex is not None and ex > 0:
             expires_at = int(time.time()) + math.ceil(ex)

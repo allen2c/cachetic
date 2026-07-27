@@ -1,0 +1,5 @@
+[flake8]
+# Kept for editors that run flake8; ruff (configured in pyproject.toml) is the
+# linter of record and CI runs that one.
+extend-ignore = E203, E704, W503
+max-line-length = 88

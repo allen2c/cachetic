@@ -1,0 +1,43 @@
+# Backing services for the test suite.
+#
+#   docker compose up -d      # start
+#   make test                 # backend tests now run instead of skipping
+#   docker compose down -v    # stop and discard data
+#
+# Ports match the defaults in tests/conftest.py. Override any of them with
+# CACHETIC_TEST_{REDIS,MONGO,POSTGRES}_URL if they clash with a local service.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cachetic
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cachetic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
