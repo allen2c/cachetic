@@ -141,6 +141,53 @@ class TestLegacyReadPath:
         cache.cache.set("k", RAW_BYTES)
         assert cache.get("k") == RAW_BYTES
 
+    def test_legacy_bare_utf8_str(self, temp_cache_url: pathlib.Path) -> None:
+        """A ``str`` stored by v0.2.0, before the format was JSON.
+
+        v0.2.0 wrote ``object_type=str`` as its raw UTF-8 bytes, unquoted;
+        v0.3.0 switched to JSON and made it unreadable, which put a hole under
+        the v0.1.0 data floor Principle 1 claims.
+        """
+        cache: Cachetic[str] = Cachetic[str](
+            object_type=pydantic.TypeAdapter(str),
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", "héllo, wörld".encode())
+        assert cache.get("k") == "héllo, wörld"
+
+    def test_legacy_bare_utf8_str_survives_json_punctuation(self, temp_cache_url: pathlib.Path) -> None:
+        """Text that is not valid JSON is exactly what the fallback is for."""
+        cache: Cachetic[str] = Cachetic[str](
+            object_type=pydantic.TypeAdapter(str),
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", b'{"not": actually json}')
+        assert cache.get("k") == '{"not": actually json}'
+
+    def test_json_str_still_wins_over_the_bare_fallback(self, temp_cache_url: pathlib.Path) -> None:
+        """v0.3.0+ values must not be re-read through the v0.2.0 path.
+
+        The fallback runs only after ``validate_json`` fails, so a quoted
+        string still parses as JSON and comes back unquoted. This is the
+        ordering that makes the fallback safe to add.
+        """
+        cache: Cachetic[str] = Cachetic[str](
+            object_type=pydantic.TypeAdapter(str),
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", b'"hello"')
+        assert cache.get("k") == "hello"
+
+    def test_the_fallback_does_not_rescue_other_types(self, temp_cache_url: pathlib.Path) -> None:
+        """Only ``str`` ever had the bare format, so only ``str`` gets the retry."""
+        cache: Cachetic[Person] = Cachetic[Person](
+            object_type=PERSON_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", b"not json at all")
+        with pytest.raises(pydantic.ValidationError):
+            cache.get("k")
+
     def test_legacy_compressed_bytes_with_matching_flag(
         self,
         temp_cache_url: pathlib.Path,

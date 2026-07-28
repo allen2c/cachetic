@@ -68,9 +68,17 @@ class TestDefaultArgument:
         finally:
             await async_cache.delete(key)
 
-    def test_unknown_keyword_now_raises(self, sync_cache: Cachetic[str]):
-        """The old signature swallowed anything; a typo has to be an error."""
-        with pytest.raises(TypeError):
+    def test_unknown_keyword_is_named_rather_than_swallowed(self, sync_cache: Cachetic[str]):
+        """A typo has to be audible. It cannot be an error.
+
+        This test used to require a ``TypeError``, which read as the stricter
+        and therefore better answer. It is not available: v0.6.0 accepted
+        ``get(key, defualt=...)`` and [Principle 1](../docs/PRINCIPLES.md) does
+        not let an accepted call start raising. The warning is what is left, and
+        it is enough — the failure this guards against is the typo passing
+        *unnoticed*, which is what v0.6.0 did.
+        """
+        with pytest.warns(DeprecationWarning, match="defualt"):
             sync_cache.get(unique_key("typo"), defualt="fallback")  # type: ignore[call-arg]
 
 
@@ -166,6 +174,46 @@ class TestDisabledClient:
             assert await writer.get(key) == "written-before-disabling"
         finally:
             await writer.delete(key)
+            await aio_close_all()
+
+    def test_sync_disabled_client_drops_a_write_carrying_an_explicit_ex(self, backend_url: str | pathlib.Path):
+        """ "Off" has to mean off, whatever ``ex`` the call carries.
+
+        ``set`` used to resolve an explicit ``ex`` on its own without consulting
+        ``disabled``, so a disabled client really wrote — and then refused to
+        read back what it had just written. The value was invisible here and
+        visible to every other client on the same URL.
+        """
+        key = unique_key("disabled-explicit-ex")
+        disabled = Cachetic[str](object_type=STR_ADAPTER, cache_url=backend_url, prefix="semantics", default_ttl=0)
+        reader = Cachetic[str](object_type=STR_ADAPTER, cache_url=backend_url, prefix="semantics", default_ttl=3600)
+
+        try:
+            disabled.set(key, "never-stored", ex=100)
+
+            assert disabled.get(key) is None
+            # The backend has to be empty too: a disabled client that writes is
+            # only invisible from behind its own disabled reads.
+            assert reader.get(key) is None
+            assert reader.exists(key) is False
+        finally:
+            reader.delete(key)
+
+    async def test_async_disabled_client_drops_a_write_carrying_an_explicit_ex(self, backend_url: str | pathlib.Path):
+        key = unique_key("disabled-explicit-ex")
+        disabled = AsyncCachetic[str](object_type=STR_ADAPTER, cache_url=backend_url, prefix="semantics", default_ttl=0)
+        reader = AsyncCachetic[str](
+            object_type=STR_ADAPTER, cache_url=backend_url, prefix="semantics", default_ttl=3600
+        )
+
+        try:
+            await disabled.set(key, "never-stored", ex=100)
+
+            assert await disabled.get(key) is None
+            assert await reader.get(key) is None
+            assert await reader.exists(key) is False
+        finally:
+            await reader.delete(key)
             await aio_close_all()
 
     def test_disabled_client_can_still_delete(self, backend_url: str | pathlib.Path):

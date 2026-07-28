@@ -18,7 +18,15 @@ import urllib.parse
 
 import pydantic
 
-from cachetic._base import MISSING, CacheNotFoundError, CacheticBase, T
+from cachetic._base import (
+    MISSING,
+    CacheNotFoundError,
+    CacheticBase,
+    T,
+    driver_modules,
+    is_async_redis,
+    warn_ignored_arguments,
+)
 from cachetic.extensions.aio._registry import close_all
 
 if typing.TYPE_CHECKING:
@@ -27,6 +35,45 @@ if typing.TYPE_CHECKING:
 __all__ = ["AsyncCachetic", "close_all"]
 
 logger = logging.getLogger("cachetic")
+
+
+def _wrap_supplied_client(client: typing.Any) -> "AsyncCacheProtocol":
+    """Adapts a backend client the caller built, without registering it.
+
+    The async twin of :func:`cachetic._wrap_supplied_client`, with one real
+    difference: Redis has to be a ``redis.asyncio.Redis``. A synchronous
+    ``redis.Redis`` would block the event loop on every call, so it is refused
+    rather than quietly accepted. ``diskcache.Cache`` is the same object on both
+    sides — it has no async API and runs in a worker thread either way.
+
+    v0.6.0 had no async client, so nothing here is grandfathered; it exists so
+    that what ``Cachetic`` accepts, ``AsyncCachetic`` accepts too.
+    """
+    modules = driver_modules(client)
+    top_level = {module.split(".")[0] for module in modules}
+
+    if "diskcache" in top_level:
+        from cachetic.extensions.aio.disk import AsyncDiskCacheAdapter
+
+        return AsyncDiskCacheAdapter(client=client)
+
+    if is_async_redis(modules):
+        from cachetic.extensions.aio.redis import AsyncRedisCacheAdapter
+
+        return AsyncRedisCacheAdapter(client=client)
+
+    if "redis" in top_level:
+        raise TypeError(
+            "AsyncCachetic got a synchronous redis.Redis, which would block the "
+            "event loop on every call. Pass a redis.asyncio.Redis instead."
+        )
+
+    raise TypeError(
+        f"cache_url got a {type(client).__module__}.{type(client).__qualname__}. "
+        "A prebuilt client may be a redis.asyncio.Redis or a diskcache.Cache; "
+        "MongoDB and PostgreSQL are configured by URL because their adapters also "
+        "need ?collection= / ?table=."
+    )
 
 
 class AsyncCachetic(CacheticBase[T]):
@@ -52,12 +99,19 @@ class AsyncCachetic(CacheticBase[T]):
 
         Routes by URL scheme: redis://, mongodb://, postgres://, or a filesystem path.
         """
+        if self.cache_client is not None:
+            return _wrap_supplied_client(self.cache_client)
+
         if isinstance(self.cache_url, pathlib.Path):
             from cachetic.extensions.aio.disk import AsyncDiskCacheAdapter
 
             return AsyncDiskCacheAdapter(self.cache_url)
 
-        parsed = urllib.parse.urlparse(self.cache_url)
+        # ``accept_a_live_backend_client`` replaced any non-(str, Path)
+        # ``cache_url`` with a label before this ran, so what is left is a URL.
+        url: str = typing.cast(str, self.cache_url)
+
+        parsed = urllib.parse.urlparse(url)
         if parsed.scheme == "redis":
             try:
                 from cachetic.extensions.aio.redis import AsyncRedisCacheAdapter
@@ -65,7 +119,7 @@ class AsyncCachetic(CacheticBase[T]):
                 raise ImportError(
                     "Redis support requires the 'redis' package. Install it with: pip install cachetic[redis]"
                 ) from None
-            return AsyncRedisCacheAdapter(self.cache_url)
+            return AsyncRedisCacheAdapter(url)
         if parsed.scheme.startswith("mongo"):
             try:
                 from cachetic.extensions.aio.mongodb import AsyncMongoCache
@@ -73,7 +127,7 @@ class AsyncCachetic(CacheticBase[T]):
                 raise ImportError(
                     "MongoDB support requires the 'pymongo' package. Install it with: pip install cachetic[mongodb]"
                 ) from None
-            return AsyncMongoCache(self.cache_url)
+            return AsyncMongoCache(url)
         if parsed.scheme.startswith("postgres"):
             try:
                 from cachetic.extensions.aio.postgres import AsyncPostgresCache
@@ -82,11 +136,11 @@ class AsyncCachetic(CacheticBase[T]):
                     "PostgreSQL support requires 'psycopg' and 'psycopg-pool'. "
                     "Install with: pip install cachetic[postgres]"
                 ) from None
-            return AsyncPostgresCache(self.cache_url)
+            return AsyncPostgresCache(url)
 
         from cachetic.extensions.aio.disk import AsyncDiskCacheAdapter
 
-        return AsyncDiskCacheAdapter(self.cache_url)
+        return AsyncDiskCacheAdapter(url)
 
     async def cache(self) -> "AsyncCacheProtocol":
         """Returns the underlying cache backend for the running event loop.
@@ -113,7 +167,7 @@ class AsyncCachetic(CacheticBase[T]):
                 self._caches[loop] = cache
             return cache
 
-    async def get(self, key: str, default: T | None = None) -> T | None:
+    async def get(self, key: str, default: T | None = None, *args: typing.Any, **kwargs: typing.Any) -> T | None:
         """Retrieves and deserializes a value from the cache.
 
         Args:
@@ -125,7 +179,12 @@ class AsyncCachetic(CacheticBase[T]):
         it returns ``None``, not ``default``.
 
         A client with ``default_ttl=0`` is disabled and misses unconditionally.
+
+        Extra arguments are accepted and ignored with a ``DeprecationWarning``;
+        see :func:`cachetic._base.warn_ignored_arguments` for why they have to be.
         """
+        warn_ignored_arguments("get", args, kwargs)
+
         if self.disabled:
             return default
 
@@ -142,20 +201,25 @@ class AsyncCachetic(CacheticBase[T]):
         # Load value
         return self._loads_any(data)
 
-    async def get_or_raise(self, key: str) -> T:
+    async def get_or_raise(self, key: str, *args: typing.Any, **kwargs: typing.Any) -> T:
         """Retrieves a value from the cache or raises CacheNotFoundError.
 
         Like :meth:`get`, but a miss raises instead of returning a default.
         Distinguishes a missing key from a stored ``None``, so a cache of an
         optional type does not raise on a key that :meth:`exists` reports.
+
+        Extra arguments are accepted and ignored with a ``DeprecationWarning``;
+        see :func:`cachetic._base.warn_ignored_arguments` for why they have to be.
         """
+        warn_ignored_arguments("get_or_raise", args, kwargs)
+
         out = await self.get(key, default=typing.cast(T, MISSING))
         if out is MISSING:
             raise CacheNotFoundError(f"Cache not found for key '{key}'")
         # `out` may legitimately be None here — a stored None is a hit.
         return typing.cast(T, out)
 
-    async def set(self, key: str, value: T, ex: int | None = None) -> None:
+    async def set(self, key: str, value: T, ex: int | None = None, *args: typing.Any, **kwargs: typing.Any) -> None:
         """Serializes and stores value in cache with optional TTL.
 
         Args:
@@ -166,7 +230,19 @@ class AsyncCachetic(CacheticBase[T]):
         An effective TTL of 0 drops the write. It does not delete an existing
         entry — the caller asked for this value not to be cached, not for the
         key to be evicted.
+
+        A client with ``default_ttl=0`` is disabled and drops the write whatever
+        ``ex`` says. Without that check an explicit ``ex`` would resolve on its
+        own and write a value this same client's :meth:`get` refuses to return.
+
+        Extra arguments are accepted and ignored with a ``DeprecationWarning``;
+        see :func:`cachetic._base.warn_ignored_arguments` for why they have to be.
         """
+        warn_ignored_arguments("set", args, kwargs)
+
+        if self.disabled:
+            return
+
         _key = self.get_cache_key(key, with_prefix=True)
 
         ttl = self._resolve_ttl(ex)
@@ -181,12 +257,17 @@ class AsyncCachetic(CacheticBase[T]):
             logger.debug(f"[SET] cache(ex={ttl}): {_key!r}")
         await cache.set(_key, _value_bytes, self._ttl_to_expiry(ttl))
 
-    async def delete(self, key: str) -> None:
+    async def delete(self, key: str, *args: typing.Any, **kwargs: typing.Any) -> None:
         """Deletes a key-value pair from the cache.
 
         Runs even on a disabled client: removing a value must not depend on
         whether this client would have written it.
+
+        Extra arguments are accepted and ignored with a ``DeprecationWarning``;
+        see :func:`cachetic._base.warn_ignored_arguments` for why they have to be.
         """
+        warn_ignored_arguments("delete", args, kwargs)
+
         _key = self.get_cache_key(key, with_prefix=True)
         cache = await self.cache()
         await cache.delete(_key)

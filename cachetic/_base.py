@@ -10,9 +10,12 @@ import inspect
 import logging
 import pathlib
 import typing
+import warnings
 
 import pydantic
 import pydantic_settings
+
+from cachetic.types.native_client import NativeCacheClient
 
 T = typing.TypeVar("T")
 
@@ -55,7 +58,16 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
 
     object_type: pydantic.TypeAdapter[T]
 
-    cache_url: str | pathlib.Path
+    cache_url: str | pathlib.Path | NativeCacheClient
+    cache_client: typing.Any = pydantic.Field(
+        default=None,
+        exclude=True,
+        repr=False,
+        description=(
+            "A backend client the caller built and still owns. Not set directly: "
+            "pass it as `cache_url`, the way v0.6.0 did."
+        ),
+    )
     default_ttl: int = pydantic.Field(
         default=-1,
         description=(
@@ -82,13 +94,70 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
     )
 
     _is_bytes_type: bool = pydantic.PrivateAttr(default=False)
+    _is_str_type: bool = pydantic.PrivateAttr(default=False)
     _durl_prefixes: tuple[bytes, ...] = pydantic.PrivateAttr(default=())
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def accept_a_live_backend_client(cls, data: typing.Any) -> typing.Any:
+        """Lets ``cache_url`` be a client the caller built, as it was in v0.6.0.
+
+        v0.6.0 typed the field ``Text | Path | redis.Redis | diskcache.Cache``,
+        so "I already configured a connection pool, use that one" was a
+        supported way to construct a cache. [Principle 1](../docs/PRINCIPLES.md)
+        does not let that call start failing validation.
+
+        The object is moved to ``cache_client`` and ``cache_url`` is replaced
+        with a label, because the URL is the connection registry's key and a
+        caller-supplied client has no key: it was not opened here and
+        :func:`cachetic.close_all` must not close it. The label is what shows up
+        in logs, so it says what happened rather than pretending to be a URL.
+
+        Recognition is by duck type, not ``isinstance``, so that this module
+        stays free of ``import redis`` — [Principle 5](../docs/PRINCIPLES.md)
+        requires no backend package be imported until its scheme is used, and a
+        type annotation is enough to break that.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        url = data.get("cache_url")
+        if url is None or isinstance(url, (str, pathlib.Path)):
+            return data
+
+        # Anything that is not remotely a cache client falls through to pydantic
+        # and is rejected there, as it was before this validator existed. Without
+        # this, ``cache_url=12345`` would be quietly stored as a "client" and only
+        # fail on the first cache operation, which can be a whole deployment away
+        # from the line that misconfigured it.
+        if not (hasattr(url, "get") and hasattr(url, "delete")):
+            return data
+
+        return {**data, "cache_client": url, "cache_url": _label_for_client(url)}
 
     @pydantic.model_validator(mode="after")
     def validate_after_init(self) -> typing.Self:
         """Validates and normalizes fields after model initialization."""
+        if (
+            isinstance(self.cache_url, str)
+            and self.cache_url.startswith(_SUPPLIED_LABEL_MARK)
+            and self.cache_client is None
+        ):
+            raise ValueError(
+                f"cache_url is {self.cache_url!r}, the placeholder left behind when a "
+                "backend client is supplied directly. The client itself is not part of "
+                "`model_dump()` — it is a live connection, not configuration — so a model "
+                "rebuilt from a dump has the label and nothing to use it with. Pass the "
+                "client again, or configure this cache by URL so that it can be serialised."
+            )
+
         self.default_ttl = _validate_ttl_value(self.default_ttl)
         self._is_bytes_type = inspect.isclass(self.object_type._type) and issubclass(self.object_type._type, bytes)
+        # Exactly ``str``, not a subclass: this only exists to read the bare
+        # UTF-8 v0.2.0 wrote for ``object_type=str``, and widening it would let
+        # the fallback in _loads_legacy accept payloads for types that never had
+        # that format. Enums and NewTypes over str are deliberately excluded.
+        self._is_str_type = self.object_type._type is str
         self._durl_prefixes = _durl_prefixes_for(self._is_bytes_type)
         return self
 
@@ -224,8 +293,59 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
                 data = decompress_auto(data)
                 return self._validate_any(data)
 
+            bare = self._loads_bare_str(data)
+            if bare is not None:
+                return bare
+
             logger.error(f"Validation error: {e!s}")
             raise
+
+    def _loads_bare_str(self, data: bytes) -> T | None:
+        """Reads the unquoted UTF-8 that v0.2.0 wrote for ``object_type=str``.
+
+        v0.2.0 stored a ``str`` as its raw bytes; v0.3.0 switched to JSON, which
+        quotes it. :meth:`_validate_any` calls ``validate_json``, so ``b"hello"``
+        has been unreadable ever since — [Principle 1](../docs/PRINCIPLES.md)
+        puts the data floor at v0.1.0, and this was under it.
+
+        Only reached after ``validate_json`` has already failed, so a value
+        written by v0.3.0 or later still parses as JSON and never gets here. That
+        ordering leaves one case that cannot be recovered and never could: a
+        v0.2.0 string whose own text is valid JSON. ``b'"quoted"'`` parses as the
+        string ``quoted`` and loses its quotes, because nothing in the format
+        distinguishes it from what v0.3.0 would have written for ``quoted``.
+
+        Returns ``None`` when this is not that format, so the caller can raise
+        the original validation error rather than one from here.
+
+        **This costs a `Cachetic[str]` its loud failure on corruption, and there
+        is no version of it that does not.** v0.2.0's format was "the bytes of
+        the string", so every byte string is a valid value under it — a truncated
+        write, a torn read or a corrupt page is indistinguishable from a string
+        that happens to look like one. ``Cachetic[int]`` still raises on the same
+        input; ``Cachetic[str]`` cannot.
+
+        So it warns. The read succeeds, because
+        [Principle 1](../docs/PRINCIPLES.md) says a value an earlier version
+        wrote must come back, but it does not pass in silence: anything reaching
+        here was written before v0.3.0, which is five releases of cache expiry
+        ago, and is far more likely to be damage than history.
+        """
+        if not self._is_str_type:
+            return None
+        try:
+            text: str = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+        logger.warning(
+            "Read %d bytes that are not valid JSON as a bare string. This is the "
+            "pre-v0.3.0 format for object_type=str and is returned as-is. If this "
+            "cache was not written by v0.2.x, the value is corrupt: %.80r",
+            len(data),
+            data,
+        )
+        return self.object_type.validate_python(text)
 
     def _dump_any(self, value: T) -> bytes:
         """Serializes value into a Data URL encoded as UTF-8 bytes.
@@ -284,6 +404,86 @@ def _detect_compression_name(data: bytes) -> str:
     from cachetic.utils.compression import ZSTD_MAGIC
 
     return _ZSTD if data.startswith(ZSTD_MAGIC) else _ZLIB
+
+
+def driver_modules(client: typing.Any) -> frozenset[str]:
+    """Every module the client's class and its bases came from.
+
+    Routing a supplied client cannot use ``isinstance``: naming ``redis.Redis``
+    means importing it, and [Principle 5](../docs/PRINCIPLES.md) says no backend
+    package is imported until its scheme is used. So it goes by module name.
+
+    The whole MRO, not just ``type(client).__module__``, because a subclass
+    defined in application code reports *that* module — ``myapp.cache.TracedRedis``
+    is a ``redis.Redis`` and has to route like one. Wrapping a client in a
+    subclass to add instrumentation is exactly what someone who builds their own
+    client is likely to have done.
+    """
+    return frozenset(base.__module__ for base in type(client).__mro__)
+
+
+def is_async_redis(modules: frozenset[str]) -> bool:
+    """True for ``redis.asyncio`` clients, which both halves must route apart.
+
+    Sync and async share the ``redis`` top level, and confusing them fails
+    quietly rather than loudly: a sync adapter calling an async client's ``set``
+    gets a coroutine back, never awaits it, and reports success on a write that
+    never happened.
+    """
+    return any(module.startswith("redis.asyncio") for module in modules)
+
+
+_SUPPLIED_LABEL_MARK = "<cachetic supplied client:"
+"""Opening of the placeholder, and the way to recognise one that lost its client.
+
+A label reaching the backend router would fall through every scheme test to the
+disk default and quietly build a cache in a directory named after it. So it is
+recognisable, and `validate_after_init` refuses a model that has the label
+without the client. See :func:`_label_for_client`.
+"""
+
+
+def _label_for_client(client: typing.Any) -> str:
+    """Names a caller-supplied client where a URL would otherwise go.
+
+    Deliberately not URL-shaped: nothing may parse this back into a scheme and
+    route on it, and it must never collide with a real registry key. It carries
+    no repr of the client, so a connection string inside one cannot leak through
+    ``cache_url_safe``.
+    """
+    return f"{_SUPPLIED_LABEL_MARK} {type(client).__module__}.{type(client).__qualname__}>"
+
+
+def warn_ignored_arguments(method: str, args: tuple[typing.Any, ...], kwargs: dict[str, typing.Any]) -> None:
+    """Accepts the extra arguments v0.6.0 swallowed, and says so.
+
+    [Principle 1](../docs/PRINCIPLES.md) requires every call v0.6.0 accepted to
+    keep being accepted. v0.6.0 declared ``*args, **kwargs`` on ``get``,
+    ``get_or_raise``, ``set`` and ``delete`` and ignored whatever landed there,
+    so ``cache.delete("k", conn)`` ran. Dropping the two from the signature made
+    that same call a ``TypeError`` — a rejection, not a different answer, which
+    is the half of rule 1 that has no "behaviour is out of scope" escape.
+
+    They are still ignored. What is new is that ignoring them is now audible:
+    the call that reaches here is either a leftover from an older Cachetic or a
+    typo, and neither should stay silent for another release.
+
+    ``get``'s ``default`` is the one extra argument that is *not* ignored — it
+    became a real parameter in 0.7.0, so ``cache.get("k", "fallback")`` finally
+    does what it always read as.
+    """
+    if not args and not kwargs:
+        return
+
+    ignored: list[str] = [repr(value) for value in args]
+    ignored += [f"{name}={value!r}" for name, value in kwargs.items()]
+    warnings.warn(
+        f"Cachetic.{method}() ignores {', '.join(ignored)}. "
+        f"Extra arguments were accepted and discarded before v0.7.0; they are still "
+        f"discarded, and passing them will become a TypeError in a future release.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def _validate_ttl_value(ttl: int) -> int:
