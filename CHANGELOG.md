@@ -14,7 +14,32 @@ the other way round. Where several processes share a cache and are upgraded one
 at a time, check the release's Upgrading notes before rolling — the older ones
 are the readers at risk.
 
-## [0.7.0] - Unreleased
+## [0.7.1] - Unreleased
+
+### Fixed
+
+- **A value that cannot be decompressed is reported instead of returned
+  undecoded.** A reader without `zstandard` cannot decompress what a writer
+  that had it produced, and the resulting error was being treated as "this is
+  not the v0.7.0 format after all", sending the value down the pre-0.7.0 read
+  path. For the two types that path accepts anything from — `bytes`, where
+  every byte string is valid, and `str`, through the pre-0.3.0 bare-string
+  reader — the raw `data:...;base64,...` envelope came back as the value: a
+  `Cachetic[bytes]` returned it in silence, and a `Cachetic[str]` with a single
+  log line. Both now raise `DecompressionError`, as every other value type
+  already did. Affects `Cachetic` and `AsyncCachetic` alike; install
+  `cachetic[zstd]` on every process that shares a cache, or on none.
+- The same conflation applied to validation: a payload that decoded but failed
+  its type's validation was retried as legacy data. It now raises. The only
+  values that read differently are v0.2.0 strings shaped like one of Cachetic's
+  own Data URLs whose payload is valid base64 and invalid JSON, which
+  `_loads_bare_str` already documents as unrecoverable.
+
+Detection of the format itself is unchanged: a value carrying one of Cachetic's
+headers whose envelope does not decode still falls back to the legacy path, so
+a `bytes` cache that stored a real data URI keeps reading it.
+
+## [0.7.0] - 2026-07-28
 
 ### Added
 
@@ -151,7 +176,7 @@ Everything else written by v0.1.0 onwards is read without migration, with the
 v0.2.0 pickle exception noted above. See
 [Upgrading to v0.7.0](https://github.com/allen2c/cachetic#upgrading-to-v070) for the details.
 
-## [0.6.1] - Unreleased
+## [0.6.1] - 2026-07-28
 
 Maintained on the [`v0.6.x`](https://github.com/allen2c/cachetic/tree/v0.6.x)
 branch, not on `main`. It exists only to make the upgrade to v0.7.0 safe on a

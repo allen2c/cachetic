@@ -228,35 +228,45 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         verbatim, so a value written before 0.7.0 can itself start with
         ``data:`` — a cached data URI is an obvious way to end up there. Only the
         exact headers :meth:`_dump_any` emits count as the new format, and even
-        then a parse failure falls back to the legacy path rather than surfacing
-        as a base64 error on data that was never base64.
+        then an envelope that does not decode falls back to the legacy path
+        rather than surfacing as a base64 error on data that was never base64.
+
+        That fallback covers the envelope and nothing else. Once the envelope
+        has decoded, the value *is* this format, and a failure past that point
+        is reported rather than retried — see :meth:`_loads_durl_payload`.
         """
         # Path 1: Data URL format (v0.7.0+)
         if data.startswith(self._durl_prefixes):
             try:
-                return self._loads_durl(data)
+                payload, compression_alg = _decode_durl(data)
             except ValueError as durl_error:
                 logger.debug(
-                    "Value looks like a Cachetic Data URL but did not parse, "
+                    "Value looks like a Cachetic Data URL but did not decode, "
                     "falling back to the pre-0.7.0 format. Error: %s",
                     durl_error,
                 )
-                try:
-                    return self._loads_legacy(data)
-                except Exception:
-                    raise durl_error from None
+            else:
+                return self._loads_durl_payload(payload, compression_alg)
 
         # Path 2 & 3: Legacy formats (compressed or raw)
         return self._loads_legacy(data)
 
-    def _loads_durl(self, data: bytes) -> T:
-        """Parses a Data URL value and returns the deserialized object."""
-        from durl import DURL
+    def _loads_durl_payload(self, payload: bytes, compression_alg: str | None) -> T:
+        """Decompresses and validates a decoded Data URL payload.
 
-        durl: DURL = DURL(data.decode("utf-8"))
-        payload: bytes = typing.cast(bytes, durl.parsed_data)
+        Deliberately outside the legacy fallback in :meth:`_loads_any`. Both
+        steps here raise ``ValueError`` subclasses — ``DecompressionError`` and
+        ``pydantic.ValidationError`` — so retrying them as legacy data would
+        conflate "this was never the new format" with "this is the new format
+        and I cannot read it".
 
-        compression_alg: str | None = durl.parameters.get("compression")
+        The second one is not hypothetical. A reader without ``zstandard``
+        cannot decompress what a writer that had it produced, and every byte
+        string validates as ``bytes``: falling back would hand a
+        ``Cachetic[bytes]`` the undecoded Data URL as its value, silently,
+        turning a missing dependency into wrong data. ``Cachetic[str]`` reaches
+        the same end through :meth:`_loads_bare_str`. Both now raise.
+        """
         if compression_alg is not None:
             from cachetic.utils.compression import decompress_auto
 
@@ -393,6 +403,22 @@ def _durl_prefixes_for(is_bytes_type: bool) -> tuple[bytes, ...]:
     headers: list[str] = [f"data:{mime};base64,"]
     headers += [f"data:{mime};compression={name};base64," for name in _COMPRESSION_NAMES]
     return tuple(header.encode("utf-8") for header in headers)
+
+
+def _decode_durl(data: bytes) -> tuple[bytes, str | None]:
+    """Decodes a Data URL envelope into its payload and compression parameter.
+
+    Split out of the read path so that exactly one step can say "this was never
+    Cachetic's format": a ``ValueError`` from here — a header ``durl`` rejects,
+    a payload that is not base64, bytes that are not UTF-8 — is the caller's
+    signal to fall back to the pre-0.7.0 path. Nothing downstream of it gets
+    that treatment, because by then the value has identified itself.
+    """
+    from durl import DURL
+
+    durl: DURL = DURL(data.decode("utf-8"))
+    payload: bytes = typing.cast(bytes, durl.parsed_data)
+    return payload, durl.parameters.get("compression")
 
 
 def _detect_compression_name(data: bytes) -> str:
