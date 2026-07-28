@@ -9,6 +9,11 @@ From v0.7.0 on, what may and may not change is fixed by
 every value an earlier version wrote and accepts every call v0.6.0 or later
 accepted. The breaks listed under v0.1.0–v0.6.0 predate that promise.
 
+That promise points one way only: a new version reads what an old one wrote, not
+the other way round. Where several processes share a cache and are upgraded one
+at a time, check the release's Upgrading notes before rolling — the older ones
+are the readers at risk.
+
 ## [0.7.0] - Unreleased
 
 ### Added
@@ -121,6 +126,21 @@ accepted. The breaks listed under v0.1.0–v0.6.0 predate that promise.
 
 ### Upgrading
 
+**Go through v0.6.1 first if more than one process shares the cache.** Principle
+1 promises that a new version reads what an old one wrote; it says nothing about
+the reverse, and v0.6.0 cannot read the Data URL format described above. Any
+rolling deployment runs both versions against the cache at once, so upgrading
+straight from v0.6.0 leaves the pods that have not restarted yet unable to read
+anything a v0.7.0 pod has written — a `ValidationError` for most types, and the
+undecoded envelope returned as the value for a `Cachetic[bytes]`, which no
+caller-side `try`/`except` catches. With the default `default_ttl=-1` those
+values never expire, so rolling back does not clear them.
+
+v0.6.1 reads this format and still writes the old one, which makes both hops
+safe to have half-deployed and safe to roll back. Deploy it everywhere, then
+move to v0.7.0. A process that is the only one on its cache, or one that can be
+stopped entirely before the new version starts, can upgrade directly.
+
 `bytes` caches are the one case needing attention: a value written by v0.5.x or
 v0.6.x with `compression=True` carries no algorithm marker, and every byte string
 is a valid `bytes`, so there is nothing to detect. Keep `compression=True` on that
@@ -130,6 +150,35 @@ they used and read back under either setting.
 Everything else written by v0.1.0 onwards is read without migration, with the
 v0.2.0 pickle exception noted above. See
 [Upgrading to v0.7.0](https://github.com/allen2c/cachetic#upgrading-to-v070) for the details.
+
+## [0.6.1] - Unreleased
+
+Maintained on the [`v0.6.x`](https://github.com/allen2c/cachetic/tree/v0.6.x)
+branch, not on `main`. It exists only to make the upgrade to v0.7.0 safe on a
+shared cache; nothing else is backported to it.
+
+### Added
+
+- **Reads the value format v0.7.0 writes**, without writing it. A v0.6.1 process
+  is compatible with v0.6.0 and v0.7.0 at the same time, which is what makes it
+  safe to be halfway through rolling either way. See the Upgrading note under
+  v0.7.0 for why going straight from v0.6.0 is not.
+- **`cachetic[zstd]` extra**, needed to read what a v0.7.0 writer that has it
+  produced. Without the library such a read raises `DecompressionError` rather
+  than returning the undecoded value.
+
+### Changed
+
+- **Compressed writes are always zlib**, where v0.6.0 used zstd whenever
+  `zstandard` happened to be importable. That made the stored algorithm a
+  property of the image rather than of the data, and the `zstd` extra above is
+  exactly the sort of thing that changes an image. zlib is in the standard
+  library, so a v0.6.1 write stays readable by the v0.6.0 processes it is
+  rolling over whatever either of them has installed.
+
+### Fixed
+
+- `__version__` reported `0.4.1` on v0.6.0.
 
 ## [0.6.0] - 2026-03-18
 
