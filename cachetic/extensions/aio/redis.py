@@ -9,6 +9,7 @@ import typing
 
 import redis.asyncio
 
+from cachetic.extensions import _ttl
 from cachetic.extensions.aio import _registry
 from cachetic.types.async_cache_protocol import AsyncCacheProtocol
 
@@ -20,9 +21,22 @@ _NAMESPACE = "redis"
 class AsyncRedisCacheAdapter(AsyncCacheProtocol):
     """Adapts ``redis.asyncio.Redis`` to the ``AsyncCacheProtocol`` interface."""
 
-    _entry: _registry.EntryHandle
+    _entry: _registry.EntryHandle | None
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str | None = None, *, client: "redis.asyncio.Redis | None" = None) -> None:  # type: ignore[type-arg]
+        """Wraps a shared client for ``url``, or a ``redis.asyncio.Redis`` given to it.
+
+        A supplied client is used as-is and never registered, for the same
+        reason as the sync adapter — with one extra: an async client belongs to
+        the loop that built it, and the caller owns that too.
+        """
+        if client is not None:
+            self._entry = None
+            self._supplied = client
+            return
+        if url is None:
+            raise ValueError("AsyncRedisCacheAdapter needs either a url or a client")
+
         self._entry = _registry.EntryHandle(
             _NAMESPACE,
             url,
@@ -32,10 +46,12 @@ class AsyncRedisCacheAdapter(AsyncCacheProtocol):
 
     @property
     def _client(self) -> "redis.asyncio.Redis":  # type: ignore[type-arg]
+        if self._entry is None:
+            return self._supplied
         return self._entry().client
 
     async def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
-        await self._client.set(key, value, ex=ex)
+        await self._client.set(key, value, ex=_ttl.expiry_seconds(ex))
 
     async def get(self, key: str, /) -> bytes | None:
         return typing.cast(bytes | None, await self._client.get(key))

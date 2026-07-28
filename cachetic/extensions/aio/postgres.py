@@ -12,7 +12,6 @@ through ``Cachetic`` is a base64 Data URL, hence ASCII.
 """
 
 import logging
-import math
 import time
 import typing
 
@@ -20,7 +19,7 @@ import psycopg
 import psycopg_pool
 from psycopg import sql
 
-from cachetic.extensions import _postgres_sql
+from cachetic.extensions import _postgres_sql, _ttl
 from cachetic.extensions._url import PostgresUrlParts, parse_postgres_url
 from cachetic.extensions.aio import _registry
 from cachetic.types.async_cache_protocol import AsyncCacheProtocol
@@ -109,9 +108,7 @@ class AsyncPostgresCache(AsyncCacheProtocol):
         """
         pool = await self._ready_pool()
 
-        expires_at: int | None = None
-        if ex is not None and ex > 0:
-            expires_at = int(time.time()) + math.ceil(ex)
+        expires_at: int | None = _ttl.deadline(ex)
 
         query = _postgres_sql.UPSERT.format(self._table_ident)
         async with pool.connection() as conn:

@@ -13,6 +13,7 @@ the per-loop registry the network backends need.
 import asyncio
 import logging
 import pathlib
+import typing
 
 from cachetic.extensions.disk import DiskCacheAdapter
 from cachetic.types.async_cache_protocol import AsyncCacheProtocol
@@ -25,8 +26,8 @@ class AsyncDiskCacheAdapter(AsyncCacheProtocol):
 
     _inner: DiskCacheAdapter
 
-    def __init__(self, path: str | pathlib.Path) -> None:
-        self._inner = DiskCacheAdapter(path)
+    def __init__(self, path: str | pathlib.Path | None = None, *, client: typing.Any = None) -> None:
+        self._inner = DiskCacheAdapter(path, client=client)
 
     async def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
         await asyncio.to_thread(self._inner.set, key, value, ex)

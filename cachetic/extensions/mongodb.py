@@ -7,13 +7,12 @@ client and per (database, collection) pair.
 """
 
 import logging
-import math
 import time
 
 import pydantic
 import pymongo
 
-from cachetic.extensions import _registry
+from cachetic.extensions import _registry, _ttl
 from cachetic.extensions._url import MongoUrlParts, parse_mongo_url
 from cachetic.types.cache_protocol import CacheProtocol
 from cachetic.types.document_param import DocumentParam
@@ -77,7 +76,7 @@ class MongoCache(CacheProtocol):
         entry may outlive its TTL by up to a second. See
         ``CacheticBase._ttl_to_expiry`` for why that is accepted.
         """
-        expires_at = None if ex is None or ex < 1 else int(time.time()) + math.ceil(ex)
+        expires_at = _ttl.deadline(ex)
 
         logger.debug(
             f"[MongoCache.set] Setting key='{key}', "

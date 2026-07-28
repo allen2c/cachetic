@@ -13,7 +13,7 @@ import typing
 
 import diskcache
 
-from cachetic.extensions import _registry
+from cachetic.extensions import _registry, _ttl
 from cachetic.types.cache_protocol import CacheProtocol
 
 logger = logging.getLogger(__name__)
@@ -25,9 +25,22 @@ class DiskCacheAdapter(CacheProtocol):
     Cache instances are shared per resolved path to avoid redundant handles.
     """
 
-    _entry: _registry.EntryHandle
+    _entry: _registry.EntryHandle | None
 
-    def __init__(self, path: str | pathlib.Path) -> None:
+    def __init__(self, path: str | pathlib.Path | None = None, *, client: diskcache.Cache | None = None) -> None:
+        """Wraps a shared cache for ``path``, or a ``diskcache.Cache`` given to it.
+
+        A supplied client is used as-is and never registered: the registry keys
+        on a URL, this has none, and :func:`cachetic.close_all` must not close a
+        handle it did not open. See ``CacheticBase.accept_a_live_backend_client``.
+        """
+        if client is not None:
+            self._entry = None
+            self._supplied = client
+            return
+        if path is None:
+            raise ValueError("DiskCacheAdapter needs either a path or a client")
+
         resolved: str = str(pathlib.Path(path).resolve())
         self._entry = _registry.EntryHandle(
             _registry.DISK_NAMESPACE,
@@ -38,10 +51,12 @@ class DiskCacheAdapter(CacheProtocol):
 
     @property
     def _cache(self) -> diskcache.Cache:
+        if self._entry is None:
+            return self._supplied
         return self._entry().client
 
     def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
-        self._cache.set(key, value, expire=ex)
+        self._cache.set(key, value, expire=_ttl.expiry_seconds(ex))
 
     def get(self, key: str, /) -> bytes | None:
         result: typing.Any = self._cache.get(key)

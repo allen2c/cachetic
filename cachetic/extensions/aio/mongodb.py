@@ -10,11 +10,11 @@ must create its index again.
 """
 
 import logging
-import math
 import time
 
 import pymongo
 
+from cachetic.extensions import _ttl
 from cachetic.extensions._url import MongoUrlParts, parse_mongo_url
 from cachetic.extensions.aio import _registry
 from cachetic.types.async_cache_protocol import AsyncCacheProtocol
@@ -84,7 +84,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
         """
         col = await self._ready_col()
 
-        expires_at = None if ex is None or ex < 1 else int(time.time()) + math.ceil(ex)
+        expires_at = _ttl.deadline(ex)
 
         logger.debug(
             f"[AsyncMongoCache.set] Setting key='{key}', "
