@@ -1,0 +1,1608 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A simple, type-safe caching library with Pydantic integration">
+      
+      
+        <meta name="author" content="Allen Chou">
+      
+      
+        <link rel="canonical" href="https://allen2c.github.io/cachetic/changelog/">
+      
+      
+        <link rel="prev" href="../contributing/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - Cachetic</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Cachetic" class="md-header__button md-logo" aria-label="Cachetic" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Cachetic
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/allen2c/cachetic" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    allen2c/cachetic
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Cachetic" class="md-nav__button md-logo" aria-label="Cachetic" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Cachetic
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/allen2c/cachetic" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    allen2c/cachetic
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRINCIPLES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#071-unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.7.1] - Unreleased
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.7.1] - Unreleased">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-07-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.7.0] - 2026-07-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.7.0] - 2026-07-28">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#upgrading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#061-2026-07-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.6.1] - 2026-07-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.6.1] - 2026-07-28">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-03-18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.6.0] - 2026-03-18
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.6.0] - 2026-03-18">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-issue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#050-2025-12-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.5.0] - 2025-12-29
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.5.0] - 2025-12-29">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#041-2025-08-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.4.1] - 2025-08-20
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.4.1] - 2025-08-20">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#040-2025-07-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.4.0] - 2025-07-24
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.4.0] - 2025-07-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030-2025-07-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.0] - 2025-07-15
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.3.0] - 2025-07-15">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020-2025-04-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.2.0] - 2025-04-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.2.0] - 2025-04-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2025-02-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.0] - 2025-02-23
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#071-unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.7.1] - Unreleased
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.7.1] - Unreleased">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-07-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.7.0] - 2026-07-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.7.0] - 2026-07-28">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#upgrading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#061-2026-07-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.6.1] - 2026-07-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.6.1] - 2026-07-28">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-03-18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.6.0] - 2026-03-18
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.6.0] - 2026-03-18">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-issue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#050-2025-12-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.5.0] - 2025-12-29
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.5.0] - 2025-12-29">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#041-2025-08-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.4.1] - 2025-08-20
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.4.1] - 2025-08-20">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#040-2025-07-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.4.0] - 2025-07-24
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.4.0] - 2025-07-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030-2025-07-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.0] - 2025-07-15
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.3.0] - 2025-07-15">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020-2025-04-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.2.0] - 2025-04-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.2.0] - 2025-04-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#010-2025-02-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.0] - 2025-02-23
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<!--
+  The changelog lives at the repository root, where GitHub and PyPI look for it.
+  This page includes that file rather than copying it: README.md and docs/index.md
+  are already two copies of one thing, and keeping those in step is a standing
+  cost. One copy is enough.
+-->
+
+<h1 id="changelog">Changelog</h1>
+<p>Notable changes for people using this library. Format follows
+<a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>; versions follow
+<a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
+<p>From v0.7.0 on, what may and may not change is fixed by
+<a href="https://allen2c.github.io/cachetic/PRINCIPLES/">six principles</a> — the first being that every version reads
+every value an earlier version wrote and accepts every call v0.6.0 or later
+accepted. The breaks listed under v0.1.0–v0.6.0 predate that promise.</p>
+<p>That promise points one way only: a new version reads what an old one wrote, not
+the other way round. Where several processes share a cache and are upgraded one
+at a time, check the release's Upgrading notes before rolling — the older ones
+are the readers at risk.</p>
+<h2 id="071-unreleased">[0.7.1] - Unreleased</h2>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>A value that cannot be decompressed is reported instead of returned
+  undecoded.</strong> A reader without <code>zstandard</code> cannot decompress what a writer
+  that had it produced, and the resulting error was being treated as "this is
+  not the v0.7.0 format after all", sending the value down the pre-0.7.0 read
+  path. For the two types that path accepts anything from — <code>bytes</code>, where
+  every byte string is valid, and <code>str</code>, through the pre-0.3.0 bare-string
+  reader — the raw <code>data:...;base64,...</code> envelope came back as the value: a
+  <code>Cachetic[bytes]</code> returned it in silence, and a <code>Cachetic[str]</code> with a single
+  log line. Both now raise <code>DecompressionError</code>, as every other value type
+  already did. Affects <code>Cachetic</code> and <code>AsyncCachetic</code> alike; install
+  <code>cachetic[zstd]</code> on every process that shares a cache, or on none.</li>
+<li>The same conflation applied to validation: a payload that decoded but failed
+  its type's validation was retried as legacy data. It now raises. The only
+  values that read differently are v0.2.0 strings shaped like one of Cachetic's
+  own Data URLs whose payload is valid base64 and invalid JSON, which
+  <code>_loads_bare_str</code> already documents as unrecoverable.</li>
+</ul>
+<p>Detection of the format itself is unchanged: a value carrying one of Cachetic's
+headers whose envelope does not decode still falls back to the legacy path, so
+a <code>bytes</code> cache that stored a real data URI keeps reading it.</p>
+<h2 id="070-2026-07-28">[0.7.0] - 2026-07-28</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong><code>AsyncCachetic</code></strong>, an async client mirroring <code>Cachetic</code> method for method on
+  all four backends. Both write byte-identical values, so one cache can be read
+  by a sync worker and an async web app at once, and a call site can be migrated
+  one at a time.</li>
+<li><strong><code>exists(key)</code></strong> on both clients — answers whether a key is present without
+  fetching and deserialising the value.</li>
+<li><strong><code>cachetic.close_all()</code></strong> and <strong><code>await cachetic.aio.close_all()</code></strong> to release
+  shared backend clients. Safe to call more than once; a cache used afterwards
+  reconnects rather than failing.</li>
+<li><strong>PostgreSQL backend</strong>, via <code>pip install cachetic[postgres]</code>. Table name and
+  pool size come from the URL: <code>?table=</code>, <code>?pool_min_size=</code>, <code>?pool_max_size=</code>.</li>
+<li><strong><code>get</code> takes a real <code>default</code></strong>: <code>cache.get("missing", "fallback")</code> returns
+  <code>"fallback"</code>. Earlier versions accepted the argument and discarded it.</li>
+<li><strong><code>cache_url</code> accepts a client you built yourself</strong> — a <code>redis.Redis</code> or
+  <code>diskcache.Cache</code>, or a <code>redis.asyncio.Redis</code> for <code>AsyncCachetic</code>. It is used
+  as-is, never entered into the shared registry, and <strong>not</strong> closed by
+  <code>close_all()</code>: closing a pool this library did not open would break it for
+  whatever else holds it. MongoDB and PostgreSQL stay URL-only, because their
+  backends also need <code>?collection=</code> / <code>?table=</code>, which a bare client cannot carry.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li><strong>BREAKING — <code>redis</code> is no longer installed by default.</strong> It moved from a core
+  dependency to the <code>cachetic[redis]</code> extra, alongside <code>cachetic[mongodb]</code>,
+  <code>cachetic[postgres]</code> and <code>cachetic[zstd]</code>. Only the disk backend ships in the
+  base install. Add the extra if you use a <code>redis://</code> URL.</li>
+<li><strong>BREAKING — environment variables need the <code>CACHETIC_</code> prefix.</strong> <code>CACHE_URL</code>
+  becomes <code>CACHETIC_CACHE_URL</code>, and likewise for <code>DEFAULT_TTL</code>, <code>PREFIX</code> and
+  <code>COMPRESSION</code>. Earlier versions read the bare names despite the documentation
+  saying otherwise, which also let a generic <code>PREFIX</code> leak in from an unrelated
+  part of the environment.</li>
+<li><strong>BREAKING — <code>default_ttl=0</code> now turns the whole client off.</strong> Reads miss,
+  <code>exists</code> reports <code>False</code>, and writes are dropped whatever <code>ex</code> an individual
+  call carries. It used to drop writes only, so a client configured to disable
+  caching kept serving whatever an earlier client had written. It still does not
+  evict: values another client wrote stay where they are, and a per-call <code>ex=0</code>
+  is unchanged — it skips that one write and leaves any existing entry alone.</li>
+<li><strong>BREAKING — <code>.cache</code> returns an adapter, not the driver.</strong> It used to hand
+  back the real <code>redis.Redis</code> / <code>diskcache.Cache</code>, so <code>cache.cache.scan_iter(...)</code>
+  worked; it now returns a four-method <code>CacheProtocol</code>. This is deliberately not
+  restored — the adapter is what lets every backend answer the same call the same
+  way. To reach the driver's own methods, build the client yourself and pass it
+  as <code>cache_url</code>.</li>
+<li><strong>BREAKING — <code>get_or_raise</code> no longer raises on a stored <code>None</code>.</strong> For a cache
+  whose type includes <code>None</code>, a key holding <code>None</code> is a hit. It used to be
+  indistinguishable from a miss, so <code>get_or_raise</code> raised on keys <code>exists</code>
+  reported as present.</li>
+<li><strong>BREAKING — zstd compression is now an extra.</strong> <code>pip install cachetic[zstd]</code>
+  rather than a side effect of having <code>zstandard</code> importable. Every process
+  sharing a cache must agree: a writer that has it prefers zstd, and a reader
+  without it cannot decompress the result.</li>
+<li><strong>BREAKING — the backend adapter protocol is positional-only.</strong> <code>MongoCache</code>
+  in particular no longer accepts <code>set(name=..., value=...)</code>. Affects only code
+  calling an adapter directly rather than through <code>Cachetic</code>.</li>
+<li><strong>Values are stored as a self-describing Data URL</strong> —
+  <code>data:application/json;compression=zstd;base64,&lt;payload&gt;</code> — carrying the
+  compression algorithm with the value, so a reader never needs to know the
+  writer's settings. Values written by earlier versions are still read; no
+  migration is needed.</li>
+<li><strong>Backend clients are shared per URL.</strong> Constructing a <code>Cachetic</code> opens
+  nothing, reaching for <code>.cache</code> opens nothing, and the first operation opens
+  exactly one client that every other instance on that URL reuses — including
+  the pools and monitor threads the driver keeps. Nothing is cached in your
+  process, so a value another client deleted is gone here too.</li>
+<li><strong>The PostgreSQL backend no longer uses peewee.</strong> Both clients talk to psycopg
+  directly, so the extra no longer pulls in an ORM, the whole URL reaches psycopg
+  (<code>sslmode</code> and friends now work on the sync client too), and the pool keeps one
+  connection warm instead of four — a cache is optional infrastructure, and four
+  becomes thirty-two across eight workers.</li>
+<li><strong>Extra arguments are accepted again.</strong> <code>get</code>, <code>set</code>, <code>delete</code> and
+  <code>get_or_raise</code> take stray positional and keyword arguments as they did in
+  v0.6.0 and still ignore them, now with a <code>DeprecationWarning</code> naming what was
+  dropped instead of discarding it in silence. <code>exists</code> is new in this release
+  and takes exactly its documented arguments.</li>
+<li><code>rich</code> and <code>str_or_none</code> are no longer dependencies, and the <code>pydantic</code> pin
+  relaxed from <code>&gt;=2,&lt;3</code> to <code>&gt;=2</code>.</li>
+</ul>
+<h3 id="fixed_1">Fixed</h3>
+<ul>
+<li><strong><code>import cachetic</code> no longer requires <code>rich</code>.</strong> v0.6.0 dropped <code>rich</code> from its
+  install requirements while still importing it at module scope, so
+  <code>pip install cachetic==0.6.0</code> followed by <code>import cachetic</code> raised
+  <code>ModuleNotFoundError</code> in an environment that had nothing else pulling it in.</li>
+<li><strong>Values written by v0.2.0 with <code>object_type=str</code> are readable again.</strong> They
+  were stored as bare UTF-8 before the format became JSON in v0.3.0. Note the
+  cost, which cannot be avoided: under that format every byte string is a valid
+  value, so a <code>Cachetic[str]</code> can no longer tell a truncated write from a real
+  v0.2.0 string, and logs a warning rather than raising. Other value types are
+  unaffected. Values pickled by v0.2.0 under <code>object_type=object</code> remain
+  deliberately unreadable — deserialising them executes arbitrary code.</li>
+<li><strong>Lazy expiry no longer discards a concurrent write.</strong> MongoDB and PostgreSQL
+  delete an entry when a read finds it expired; that delete now matches on the
+  deadline it just read, so a <code>set</code> landing in between is not clobbered. Redis
+  and diskcache enforce their own deadlines and were never affected.</li>
+<li><strong>zstd compression is safe to use from several threads.</strong> <code>zstandard</code>'s
+  one-shot API reuses an internal context, and one shared instance could crash
+  the interpreter — Cachetic clients are designed to be shared. Contexts are now
+  per thread.</li>
+<li><strong><code>await cachetic.aio.close_all()</code> releases disk handles too.</strong> They live in
+  the synchronous registry, because <code>diskcache</code> has no async API and no event
+  loop of its own; without this an application that only ever awaited the async
+  teardown never closed a single SQLite handle.</li>
+<li><strong>A lost <code>CREATE TABLE IF NOT EXISTS</code> race is no longer fatal.</strong> A fleet
+  starting at once against an empty PostgreSQL database used to have one instance
+  fail to start.</li>
+</ul>
+<h3 id="upgrading">Upgrading</h3>
+<p><strong>Go through v0.6.1 first if more than one process shares the cache.</strong> Principle
+1 promises that a new version reads what an old one wrote; it says nothing about
+the reverse, and v0.6.0 cannot read the Data URL format described above. Any
+rolling deployment runs both versions against the cache at once, so upgrading
+straight from v0.6.0 leaves the pods that have not restarted yet unable to read
+anything a v0.7.0 pod has written — a <code>ValidationError</code> for most types, and the
+undecoded envelope returned as the value for a <code>Cachetic[bytes]</code>, which no
+caller-side <code>try</code>/<code>except</code> catches. With the default <code>default_ttl=-1</code> those
+values never expire, so rolling back does not clear them.</p>
+<p>v0.6.1 reads this format and still writes the old one, which makes both hops
+safe to have half-deployed and safe to roll back. Deploy it everywhere, then
+move to v0.7.0. A process that is the only one on its cache, or one that can be
+stopped entirely before the new version starts, can upgrade directly.</p>
+<p><code>bytes</code> caches are the one case needing attention: a value written by v0.5.x or
+v0.6.x with <code>compression=True</code> carries no algorithm marker, and every byte string
+is a valid <code>bytes</code>, so there is nothing to detect. Keep <code>compression=True</code> on that
+client to read its own old data. Values written from v0.7.0 on say which algorithm
+they used and read back under either setting.</p>
+<p>Everything else written by v0.1.0 onwards is read without migration, with the
+v0.2.0 pickle exception noted above. See
+<a href="https://github.com/allen2c/cachetic#upgrading-to-v070">Upgrading to v0.7.0</a> for the details.</p>
+<h2 id="061-2026-07-28">[0.6.1] - 2026-07-28</h2>
+<p>Maintained on the <a href="https://github.com/allen2c/cachetic/tree/v0.6.x"><code>v0.6.x</code></a>
+branch, not on <code>main</code>. It exists only to make the upgrade to v0.7.0 safe on a
+shared cache; nothing else is backported to it.</p>
+<h3 id="added_1">Added</h3>
+<ul>
+<li><strong>Reads the value format v0.7.0 writes</strong>, without writing it. A v0.6.1 process
+  is compatible with v0.6.0 and v0.7.0 at the same time, which is what makes it
+  safe to be halfway through rolling either way. See the Upgrading note under
+  v0.7.0 for why going straight from v0.6.0 is not.</li>
+<li><strong><code>cachetic[zstd]</code> extra</strong>, needed to read what a v0.7.0 writer that has it
+  produced. Without the library such a read raises <code>DecompressionError</code> rather
+  than returning the undecoded value.</li>
+</ul>
+<h3 id="changed_1">Changed</h3>
+<ul>
+<li><strong>Compressed writes are always zlib</strong>, where v0.6.0 used zstd whenever
+  <code>zstandard</code> happened to be importable. That made the stored algorithm a
+  property of the image rather than of the data, and the <code>zstd</code> extra above is
+  exactly the sort of thing that changes an image. zlib is in the standard
+  library, so a v0.6.1 write stays readable by the v0.6.0 processes it is
+  rolling over whatever either of them has installed.</li>
+</ul>
+<h3 id="fixed_2">Fixed</h3>
+<ul>
+<li><code>__version__</code> reported <code>0.4.1</code> on v0.6.0.</li>
+</ul>
+<h2 id="060-2026-03-18">[0.6.0] - 2026-03-18</h2>
+<h3 id="added_2">Added</h3>
+<ul>
+<li>MongoDB clients are pooled: instances pointing at the same URL share one
+  <code>MongoClient</code>, and the unique index is created once per database and collection
+  rather than on every instantiation.</li>
+</ul>
+<h3 id="fixed_3">Fixed</h3>
+<ul>
+<li>Debug log lines for <code>get</code> / <code>set</code> are built only when debug logging is on.</li>
+</ul>
+<h3 id="known-issue">Known issue</h3>
+<ul>
+<li><code>rich</code> was removed from the install requirements but is still imported at
+  module scope, so <code>import cachetic</code> fails in an environment that does not
+  otherwise have it. Fixed in v0.7.0; installing <code>rich</code> alongside works around it.</li>
+</ul>
+<h2 id="050-2025-12-29">[0.5.0] - 2025-12-29</h2>
+<h3 id="added_3">Added</h3>
+<ul>
+<li><strong><code>compression</code></strong> option. Values are compressed before storage — zstd when
+  <code>zstandard</code> is importable, zlib otherwise — and decompressed on read, with the
+  format detected from the data.</li>
+<li>A published documentation site.</li>
+</ul>
+<h3 id="changed_2">Changed</h3>
+<ul>
+<li>The <code>pydantic-settings</code> version pin was relaxed.</li>
+</ul>
+<h2 id="041-2025-08-20">[0.4.1] - 2025-08-20</h2>
+<h3 id="changed_3">Changed</h3>
+<ul>
+<li><strong>BREAKING — the MongoDB extra was renamed</strong> from <code>cachetic[mongo]</code> to
+  <code>cachetic[mongodb]</code>. Installs naming the old one fail.</li>
+<li><code>rich</code> became a runtime dependency, used to pretty-print cache keys in debug
+  logs.</li>
+</ul>
+<h2 id="040-2025-07-24">[0.4.0] - 2025-07-24</h2>
+<h3 id="added_4">Added</h3>
+<ul>
+<li><strong>MongoDB backend.</strong> Pass a <code>mongodb://</code> URL with a database path and a
+  <code>?collection=</code> parameter, and install <code>cachetic[mongo]</code>.</li>
+<li><strong><code>delete(key)</code></strong>.</li>
+</ul>
+<h2 id="030-2025-07-15">[0.3.0] - 2025-07-15</h2>
+<h3 id="changed_4">Changed</h3>
+<ul>
+<li><strong>BREAKING — <code>object_type</code> is now a <code>pydantic.TypeAdapter</code>.</strong> <code>object_type=Person</code>
+  becomes <code>object_type=pydantic.TypeAdapter(Person)</code>.</li>
+<li><strong>BREAKING — everything is stored as JSON</strong> via the adapter, except <code>bytes</code>,
+  which is still stored raw. This replaces the per-type encodings v0.2.0 used.</li>
+<li><strong>BREAKING — values written by v0.2.0 for <code>object_type=object</code> (pickle) and
+  <code>object_type=str</code> (bare UTF-8) can no longer be read.</strong> Those caches have to be
+  repopulated. v0.7.0 restores the <code>str</code> half.</li>
+<li><strong>BREAKING — <code>cache_prefix</code> was renamed to <code>prefix</code>, <code>cache_ttl</code> to
+  <code>default_ttl</code></strong>, and <code>cache_url</code> became required.</li>
+<li><code>cache_url</code> also accepts an already-built <code>redis.Redis</code> or <code>diskcache.Cache</code>.</li>
+</ul>
+<h3 id="removed">Removed</h3>
+<ul>
+<li><strong>BREAKING — caching arbitrary objects via <code>pickle</code></strong> (<code>object_type=object</code>).</li>
+</ul>
+<h2 id="020-2025-04-21">[0.2.0] - 2025-04-21</h2>
+<h3 id="added_5">Added</h3>
+<ul>
+<li><code>object_type</code> accepts <code>bytes</code>, <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>, <code>list</code>, <code>dict</code>, a
+  <code>pydantic.BaseModel</code> subclass, a <code>TypeAdapter</code>, or <code>object</code> for anything
+  picklable. Each type has its own wire format — <code>str</code>, for instance, is stored as
+  bare UTF-8 rather than JSON.</li>
+<li>The connection is checked on first use — a Redis <code>PING</code>, or a trial write for
+  the disk cache — raising instead of failing later.</li>
+<li><code>get_cache_key()</code>, returning the effective prefixed key.</li>
+</ul>
+<h3 id="changed_5">Changed</h3>
+<ul>
+<li><strong>BREAKING — <code>cache_url</code> and <code>cache_dir</code> merged into <code>cache_url</code>.</strong> Pass a
+  <code>redis://</code> URL or a filesystem path; <code>cache_dir</code> is gone.</li>
+<li><strong>BREAKING — the default <code>object_type</code> became <code>object</code></strong>, so an
+  unparameterised <code>Cachetic()</code> pickles values rather than validating them as a
+  model.</li>
+<li>The <code>diskcache</code> and <code>redis</code> pins dropped their upper bound.</li>
+</ul>
+<h3 id="removed_1">Removed</h3>
+<ul>
+<li><strong>BREAKING — <code>get_objects()</code>, <code>get_objects_or_raise()</code> and <code>set_objects()</code></strong>,
+  with no replacement.</li>
+</ul>
+<h2 id="010-2025-02-23">[0.1.0] - 2025-02-23</h2>
+<p>Initial release. <code>Cachetic[T]</code> caches a Pydantic model type to a local
+<code>diskcache</code> directory or a Redis server, with <code>get</code> / <code>get_or_raise</code> / <code>set</code> for
+single objects, <code>get_objects</code> / <code>get_objects_or_raise</code> / <code>set_objects</code> for lists,
+and TTL and key-prefix support. Values are serialised with <code>model_dump_json()</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

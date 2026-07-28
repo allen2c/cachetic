@@ -1,0 +1,952 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A simple, type-safe caching library with Pydantic integration">
+      
+      
+        <meta name="author" content="Allen Chou">
+      
+      
+        <link rel="canonical" href="https://allen2c.github.io/cachetic/architecture/">
+      
+      
+        <link rel="prev" href="../PRINCIPLES/">
+      
+      
+        <link rel="next" href="../contributing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Architecture - Cachetic</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Cachetic" class="md-header__button md-logo" aria-label="Cachetic" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Cachetic
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/allen2c/cachetic" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    allen2c/cachetic
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Cachetic" class="md-nav__button md-logo" aria-label="Cachetic" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Cachetic
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/allen2c/cachetic" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    allen2c/cachetic
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRINCIPLES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invariants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#value-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connection-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Connection lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#event-loop-affinity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event-loop affinity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-trade-offs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known trade-offs
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invariants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#value-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connection-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Connection lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#event-loop-affinity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event-loop affinity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-trade-offs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known trade-offs
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="architecture">Architecture</h1>
+<p>How Cachetic is put together, and the invariants that must not be broken.</p>
+<p>The rules themselves live in <a href="../PRINCIPLES/">Principles</a> and do not change when
+the code does. This page is the other half: what the code currently looks like,
+and which test pins each part of it.</p>
+<h2 id="layers">Layers</h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>CacheticBase          configuration, key naming, TTL, serialisation — no I/O
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>├── Cachetic          4 sync operations  + cache          (CacheProtocol)
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>└── AsyncCachetic     4 async operations + await cache()  (AsyncCacheProtocol)
+</span></code></pre></div>
+<p><code>cachetic/_base.py</code> holds everything that does not touch the network or disk.
+Both clients inherit it, which is what keeps the storage format from forking:
+there is exactly one implementation of <code>_dump_any</code> / <code>_loads_any</code>.</p>
+<p>Below the clients, <code>cachetic/extensions/_ttl.py</code> is the same idea one layer
+down — one definition of what <code>ex</code> means to a backend, so eight adapters cannot
+each answer it differently.</p>
+<p>Backends live in <code>cachetic/extensions/</code> (sync) and <code>cachetic/extensions/aio/</code>
+(async), each implementing a four-method protocol from <code>cachetic/types/</code>.</p>
+<h2 id="invariants">Invariants</h2>
+<div class="admonition danger">
+<p class="admonition-title">Do not break these</p>
+<ol>
+<li><strong>One value format.</strong> <code>Cachetic</code> and <code>AsyncCachetic</code> must produce
+   byte-identical payloads. Pinned by
+   <code>TestCrossClientInterop::test_identical_serialised_bytes</code>.</li>
+<li><strong>Three storage formats, one reader.</strong> <a href="../PRINCIPLES/">Principle 1</a>
+   requires every version to read what earlier ones wrote; the mechanism is
+   <code>_loads_any</code>, which dispatches on Data URL (v0.7.0+), compressed legacy
+   (v0.5.0+), and raw bytes (v0.1.0+). Detection must stay narrow: a <code>bytes</code>
+   cache stores its payload verbatim, so pre-0.7.0 data can itself begin
+   with <code>data:</code>. Pinned by <code>tests/test_version_compat.py</code>.</li>
+<li><strong>Sync and async PostgreSQL create the same table.</strong> Both use
+   <code>CREATE TABLE IF NOT EXISTS</code>, so a mismatch diverges silently rather than
+   raising. The schema lives once, in
+   <code>cachetic/extensions/_postgres_sql.py</code>. Pinned by
+   <code>test_sync_and_async_share_one_ddl_definition</code> and by
+   <code>test_async_ddl_matches_sync_ddl</code>, which compares <code>information_schema</code>.</li>
+<li><strong>URL parsing is shared.</strong> <code>cachetic/extensions/_url.py</code> is the only place
+   that strips Cachetic's own parameters — <code>?collection=</code>, <code>?table=</code>,
+   <code>?pool_min_size=</code>, <code>?pool_max_size=</code>. Everything else in the URL reaches
+   the driver untouched, which is what keeps options like <code>sslmode</code> in effect
+   for both clients. Pinned by <code>tests/test_url.py</code> and by
+   <code>test_libpq_options_reach_both_backends</code>.</li>
+<li><strong>A connection URL never reaches a log line unmasked.</strong> Registry keys are
+   the raw URL — they have to be — and for Redis, MongoDB and PostgreSQL that
+   carries the password. Every <code>logger</code> call in both registries passes it
+   through <code>hide_url_password</code> first, and that function never raises and
+   never echoes back a URL it could not redact. Pinned by
+   <code>test_registry_never_logs_a_password</code> and
+   <code>tests/utils/test_hide_url_password.py</code>.</li>
+<li><strong>Backends answer the same call the same way.</strong> The TTL a backend is
+   handed means one thing everywhere, defined once in
+   <code>cachetic/extensions/_ttl.py</code>: <code>None</code> or non-positive stores without a
+   deadline, positive expires. Left to the drivers this went four ways —
+   diskcache stored an already-expired value, redis raised, MongoDB and
+   PostgreSQL stored forever. It matters because <code>Cachetic.cache</code> is public.
+   Pinned by <code>tests/test_backend_parity.py</code>.</li>
+<li><strong>The key on the wire is <code>prefix:key</code>.</strong> <a href="../PRINCIPLES/">Principle 4</a>
+   is unenforceable from inside <code>get_cache_key</code>, so
+   <code>tests/test_key_scheme.py</code> reads the stored key back through the raw
+   driver on each backend, and checks all four operations ask for the
+   prefix.</li>
+<li><strong>Importing Cachetic imports no driver.</strong> <a href="../PRINCIPLES/">Principle 5</a>,
+   pinned by <code>tests/test_optional_imports.py</code>, which has to run in a
+   subprocess: the rest of the suite imports every driver at module scope.</li>
+<li><strong>A missing key and a stored <code>None</code> are different things.</strong> <code>get</code> returns
+   its <code>default</code> only for a real backend miss; a cache whose <code>T</code> includes
+   <code>None</code> can store <code>None</code>, and reading it back is a hit. The distinction
+   travels on the <code>MISSING</code> sentinel in <code>_base.py</code>, which is what stops
+   <code>get_or_raise</code> raising on a key <code>exists</code> reports. Pinned by
+   <code>tests/test_client_semantics.py</code>.</li>
+</ol>
+</div>
+<h2 id="value-format">Value format</h2>
+<p>Values are serialised as <a href="https://developer.mozilla.org/en-US/docs/Web/URI/Schemes/data">Data URLs</a>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>data:application/json;compression=zstd;base64,&lt;payload&gt;
+</span></code></pre></div>
+<p>The compression algorithm travels with the value, so a reader never needs to know
+the writer's settings. Because the payload is always base64, it is always ASCII —
+which is why the PostgreSQL backend can store it in a <code>TEXT</code> column.</p>
+<h2 id="connection-lifecycle">Connection lifecycle</h2>
+<p><a href="../PRINCIPLES/">Principle 6</a> is the rule this section implements. Measured, for
+every backend: constructing a <code>Cachetic</code> opens nothing, reaching for <code>.cache</code>
+opens nothing — it only builds an adapter holding an <code>EntryHandle</code> — and the
+first actual operation opens exactly one client, which every later instance on
+that URL reuses. <code>tests/test_resource_discipline.py</code> pins all of it, including
+that no value is kept in the process between calls.</p>
+<p>Backend clients are shared between every instance that names the same URL. An
+application typically builds several <code>Cachetic</code> objects — one per cached type —
+and each opening its own connections would waste them for no gain. For MongoDB
+and PostgreSQL the waste is not only sockets: <code>pymongo</code> keeps three monitor
+threads per client and <code>psycopg_pool</code> a scheduler and its workers, so twenty
+unshared instances would be sixty threads doing nothing.</p>
+<p>There are two registries with a deliberately identical shape:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>cachetic/extensions/_registry.py</code></th>
+<th><code>cachetic/extensions/aio/_registry.py</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Key</td>
+<td><code>(namespace, url)</code></td>
+<td><code>(loop, namespace, url)</code></td>
+</tr>
+<tr>
+<td>Teardown</td>
+<td><code>cachetic.close_all()</code></td>
+<td><code>await cachetic.aio.close_all()</code></td>
+</tr>
+<tr>
+<td>Entry lock</td>
+<td><code>threading.Lock</code></td>
+<td><code>asyncio.Lock</code></td>
+</tr>
+<tr>
+<td>Eviction</td>
+<td>only <code>close_all()</code></td>
+<td><code>close_all()</code>, plus a sweep of closed loops</td>
+</tr>
+</tbody>
+</table>
+<p>Both expose <code>Entry</code>, <code>EntryHandle</code>, <code>acquire</code> and <code>close_all</code> with the same
+semantics, so what a contributor learns about one half applies to the other.
+<code>test_sync_and_async_registries_expose_the_same_api</code> pins that.</p>
+<p><strong>Adapters must never hold on to an <code>Entry</code>.</strong> They keep an <code>EntryHandle</code> and
+re-resolve through the registry on every operation, which costs one lock and one
+dict lookup. That is what lets a cache used again after <code>close_all()</code> reconnect
+instead of failing for the rest of the process. Pinned by
+<code>test_instance_recovers_after_close_all</code> and its async twin.</p>
+<p>Setup that must happen exactly once per client — <code>create_index</code>,
+<code>CREATE TABLE</code>, <code>pool.open()</code> — is guarded by the entry's own lock and recorded
+in <code>entry.ensured</code>, so a fresh client redoes it and a shared one does not.</p>
+<p><strong>A client the caller supplied is not the registry's.</strong> <code>cache_url</code> accepts a
+live <code>redis.Redis</code> / <code>diskcache.Cache</code> — <a href="../PRINCIPLES/">Principle 1</a> requires
+it, v0.6.0 took one. <code>CacheticBase.accept_a_live_backend_client</code> moves it to
+<code>cache_client</code> and puts a label where the URL was, because the registry keys on
+the URL and this has none. The adapter holds the object directly instead of an
+<code>EntryHandle</code>, so it is never shared, never swept, and never closed by
+<code>close_all()</code>. Pinned by <code>tests/test_supplied_client.py</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">The registry has no upper bound</p>
+<p>Entries are keyed by URL and only removed by <code>close_all()</code> or a dead loop, so
+a URL built per request or per tenant keeps opening connections that are
+never reused. Cache URLs must come from a fixed, small set. Both registries
+warn once past <code>BUSY_REGISTRY_SIZE</code> entries, which is a smoke alarm, not a
+limit. Eviction is deliberately not implemented: closing a client that other
+live adapters are mid-operation on would trade a leak for a crash.</p>
+</div>
+<h3 id="event-loop-affinity">Event-loop affinity</h3>
+<p>Async drivers bind to the event loop that created their connection pool. A client
+reused from another loop raises <code>got Future attached to a different loop</code>. The
+async registry therefore keys by <code>(loop, namespace, url)</code> and uses two locks for
+two different jobs:</p>
+<table>
+<thead>
+<tr>
+<th>Guarded</th>
+<th>Lock</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registry lookup and client construction</td>
+<td><code>threading.Lock</code></td>
+<td>Every client factory is <em>synchronous</em>, so the lock is never held across an <code>await</code> and stays safe when several threads each run a loop</td>
+</tr>
+<tr>
+<td>Awaitable setup — <code>create_index</code>, <code>CREATE TABLE</code>, <code>pool.open()</code></td>
+<td><code>asyncio.Lock</code> stored <strong>inside the entry</strong></td>
+<td>Created under the loop that owns the entry, so it is never shared across loops</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Why not WeakKeyDictionary</p>
+<p>Keying by a weak reference to the loop looks right and does nothing: every
+async client stores a reference back to its loop, so the value keeps the key
+alive and entries are never collected. Dead loops are swept explicitly on the
+next <code>acquire()</code> instead — which, because adapters resolve through
+<code>EntryHandle</code>, is every cache operation.</p>
+</div>
+<p><code>close_all()</code> closes only the clients belonging to the running loop — a client
+from another loop cannot be awaited from here. There is no reference counting, so
+calling it while a request is in flight surfaces a raw driver error.</p>
+<p>Disk is the one exception, and it is deliberate. <code>diskcache</code> has no async API and
+its handles are not loop-bound, so the async disk adapter shares the <em>synchronous</em>
+registry's entries and there is no per-loop entry for <code>close_all</code> to find. The
+async teardown therefore also closes the <code>DISK_NAMESPACE</code> entries; without that,
+an application that only ever awaits <code>cachetic.aio.close_all()</code> would never
+release a single SQLite handle. Pinned by
+<code>test_close_all_releases_disk_handles</code>.</p>
+<p><strong>Sweeping a dead loop cannot close its client.</strong> Every close these drivers
+offer — <code>Redis.aclose</code>, <code>AsyncMongoClient.close</code>, <code>AsyncConnectionPool.close</code> —
+is a coroutine, and there is no live loop to run it on. The sweep drops the
+reference and the garbage collector releases the socket; it also cannot run at
+all while the process makes no cache calls. The first time this happens is
+logged at WARNING rather than DEBUG, because it means connections outlived the
+last chance to close them deliberately.</p>
+<h2 id="known-trade-offs">Known trade-offs</h2>
+<p>These are decisions, not bugs. Change them only deliberately.</p>
+<ul>
+<li><strong>Disk async is thread offload.</strong> <code>diskcache</code> has no async API. Cancelling an
+  operation returns immediately while the worker thread finishes the write.</li>
+<li><strong>MongoDB and PostgreSQL expire late.</strong> Both store a whole-second deadline from
+  a truncated clock and compare with a strict <code>&lt;</code>, so an entry can outlive its
+  TTL by up to a second. It never expires early. Matching the two backends
+  exactly was judged more valuable than sub-second accuracy.</li>
+<li><strong>Expiry is cleaned up lazily, on read.</strong> <code>get</code> and <code>exists</code> delete the entry
+  they found expired. That delete is conditional on the deadline they read — an
+  unconditional delete-by-key would drop a value written by a concurrent <code>set</code>
+  in between. Pinned across all four paths — sync and async, <code>get</code> and
+  <code>exists</code> — by <code>tests/test_lazy_expiry_race.py</code>. Postgres shares one <code>_fetch</code>
+  between <code>get</code> and <code>exists</code>; Mongo's <code>exists</code> carries its own copy of the
+  compare-and-delete, which is why testing <code>get</code> alone was not enough.</li>
+<li><strong>Pre-0.7.0 <code>bytes</code> values need the writer's <code>compression</code> setting.</strong> They
+  carry no algorithm marker, and every byte string validates as <code>bytes</code>, so
+  there is no failure to recover from. Every other value type recovers on its
+  own, and 0.7.0 values are self-describing.</li>
+<li><strong>Which compression algorithm gets used depends on the environment.</strong> zstd
+  when <code>zstandard</code> is importable, zlib otherwise. Values say which, so a reader
+  only needs the matching library — but a reader without the <code>zstd</code> extra cannot
+  read what a writer with it produced. Processes sharing a cache must agree on
+  the extra.</li>
+<li><strong>PostgreSQL keeps one connection warm by default.</strong> psycopg's own default is
+  four, which multiplies across every process in a deployment for what is
+  optional infrastructure. <code>?pool_min_size=</code> / <code>?pool_max_size=</code> raise it.
+  <code>max_size</code> has to be set explicitly — psycopg reads <code>None</code> as "same as
+  <code>min_size</code>", which would serialise every query.</li>
+<li><strong><code>ensured</code> state lives on the registry entry</strong>, not in a module-level set, so
+  a fresh client re-creates its index or table and a shared one does not.</li>
+<li><strong>zstd contexts are per thread, not per process.</strong> <code>zstandard</code>'s one-shot
+  <code>compress</code>/<code>decompress</code> reuse an internal C context, so one shared instance
+  segfaults the interpreter under concurrent use — and Cachetic clients are
+  designed to be shared. <code>_ZSTD_LOCAL</code> in <code>cachetic/utils/compression.py</code> keeps
+  the "build it once" saving without the sharing, at the cost of one context per
+  thread. Pinned by <code>test_zstd_is_safe_from_many_threads</code>, which runs in a
+  subprocess because the failure it guards against is a SIGSEGV.</li>
+<li><strong>Losing the <code>CREATE TABLE</code> race is not an error.</strong> The entry lock serialises
+  table creation within a process, but the registry is process-local and
+  <code>IF NOT EXISTS</code> is not atomic across sessions. Both PostgreSQL backends catch
+  <code>DuplicateTable</code> / <code>UniqueViolation</code> around the DDL and treat the table as
+  ensured — a fleet starting at once against an empty database would otherwise
+  have one instance fail to start. Caught outside the connection block so the
+  rollback runs first.</li>
+<li><strong><code>default_ttl=0</code> disables the client, it does not evict.</strong> The semantics are
+  fixed by <a href="../PRINCIPLES/">Principle 3</a>. All four operations consult <code>disabled</code>
+  before the backend: reads miss, writes are dropped whatever <code>ex</code> the call
+  carries, and only <code>delete</code> still runs. An earlier version checked it in <code>get</code>
+  and <code>exists</code> but not <code>set</code>, so an explicit <code>ex</code> resolved on its own and wrote
+  a value that same client refused to read back. Pinned by
+  <code>test_sync_disabled_client_drops_a_write_carrying_an_explicit_ex</code> and its
+  async twin.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
