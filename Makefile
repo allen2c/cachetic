@@ -1,35 +1,29 @@
 # Development
-format-all:
-	@isort . \
-		--skip setup.py \
-		--skip .venv \
-		--skip build \
-		--skip dist \
-		--skip __pycache__ \
-		--skip docs \
-		--skip static \
-		--skip .conda
-	@black . \
-		--exclude setup.py \
-		--exclude .venv \
-		--exclude build \
-		--exclude dist \
-		--exclude __pycache__ \
-		--exclude docs \
-		--exclude static \
-		--exclude .conda
+fmt:
+	@isort cachetic tests
+	@black cachetic tests
+	@ruff check --fix cachetic tests
 
-install-all:
+install:
 	poetry install --all-extras --all-groups
-update-all:
+
+update:
 	poetry update
-	poetry export --without-hashes -f requirements.txt --output requirements.txt
-	poetry export --without-hashes -f requirements.txt --output requirements-all.txt --all-extras --all-groups
 
 # Docs
 mkdocs:
 	mkdocs serve
 
 # Tests
+# Backend tests skip themselves unless the services are up; `make services-up`
+# starts Redis, MongoDB and PostgreSQL on the ports tests/conftest.py expects.
+services-up:
+	docker compose up -d --wait
+
+services-down:
+	docker compose down -v
+
 test:
 	python -m pytest
+
+test-all: services-up test

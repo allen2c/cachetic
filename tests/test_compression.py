@@ -81,8 +81,6 @@ def test_read_compressed_data(temp_cache_url: pathlib.Path):
     result = cache_with_compression.get("user:3")
     assert result is not None
     assert pformat(person.model_dump()) == pformat(result.model_dump())
-    result = cache_without_compression.get(
-        "user:3"
-    )  # The disabled cache still can try to decompress the data
+    result = cache_without_compression.get("user:3")  # The disabled cache still can try to decompress the data
     assert result is not None
     assert pformat(person.model_dump()) == pformat(result.model_dump())

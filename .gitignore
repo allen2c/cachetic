@@ -1,5 +1,8 @@
 .claude
+.cursor
+HANDOFF.md
 poetry.lock
+tmp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

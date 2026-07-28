@@ -1,7 +1,6 @@
 # tests/test_object_types.py
 
 import pathlib
-import typing
 
 import pydantic
 
@@ -130,8 +129,8 @@ def test_pydantic_model(temp_cache_url: pathlib.Path):
 
 def test_pydantic_models(temp_cache_url: pathlib.Path):
     """Tests caching lists of Pydantic models."""
-    cache = Cachetic[typing.List[Person]](
-        object_type=pydantic.TypeAdapter(typing.List[Person]),
+    cache = Cachetic[list[Person]](
+        object_type=pydantic.TypeAdapter(list[Person]),
         cache_url=temp_cache_url,
     )
     key = "test_pydantic_models"

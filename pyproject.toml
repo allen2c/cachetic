@@ -2,38 +2,92 @@
 authors = [{ name = "Allen Chou", email = "f1470891079@gmail.com" }]
 dependencies = [
   "diskcache (>=5)",
-  "pydantic (>=2,<3)",
+  "durl-py",
+  "pydantic (>=2)",
   "pydantic-settings",
-  "redis (>=5)",
-  "str_or_none",
 ]
 description = "Simple cache with pydantic."
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-version = "0.6.0"
+version = "0.7.0"
+
+[project.urls]
+Documentation = "https://allen2c.github.io/cachetic"
+Repository = "https://github.com/allen2c/cachetic"
 
 [project.optional-dependencies]
-mongodb = ["pymongo (>=4)"]
+mongodb = ["pymongo (>=4.9)"]                  # 4.9 introduced AsyncMongoClient
+postgres = ["psycopg-pool", "psycopg[binary]"]
+redis = ["redis (>=5)"]
+# Compression falls back to zlib when this is absent. Declare it explicitly:
+# a writer that has zstd installed produces values a reader without it cannot
+# decompress, so the two ends must agree.
+zstd = ["zstandard"]
 
 [tool.poetry.group.dev.dependencies]
 black = "*"
-codepress = "*"
 isort = "*"
 logging-bullet-train = "*"
 mkdocs-material = "*"
-poetry-plugin-export = "*"
+psycopg = { extras = ["binary"], version = "*" }
+psycopg-pool = "*"
 pymongo = "*"
 pytest = "*"
+pytest-asyncio = "*"
+redis = "*"
 rich = "*"
+ruff = "*"
+zstandard = "*"
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
 
 [tool.isort]
+line_length = 120
 profile = "black"
 
-[tool.flake8]
-ignore = ["E203", "E704", "W503"]
-max-line-length = 88
+# Pin the rule set explicitly: without this, ruff's defaults drift between
+# releases and CI can start failing on untouched code.
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = [
+  "E203",   # whitespace before ':' — conflicts with black
+  "RUF002", # en/em dashes are used deliberately in docstring prose
+  "TRY003", # long messages outside exception classes — install hints are a feature
+  "TRY400", # logging.error in except — .exception would duplicate the traceback
+]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "PIE", # flake8-pie
+  "RET", # flake8-return
+  "RUF", # ruff-specific
+  "TRY", # tryceratops
+  "UP",  # pyupgrade
+  "W",   # pycodestyle warnings
+]
+
+# Pinned for the same reason as the ruff block above: without an explicit mode
+# and version, pyright's defaults drift between releases. Optional backends are
+# dev dependencies, so run it against the project environment — a bare `pyright`
+# on an interpreter without them reports every extra as a missing import.
+[tool.pyright]
+include = ["cachetic", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

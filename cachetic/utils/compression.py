@@ -1,43 +1,64 @@
+"""Compression helpers shared by the value format.
+
+zstd is preferred when available and zlib is the fallback, which means the
+algorithm a value is written with depends on the writer's environment. Values
+record which one they used, so a reader only needs the matching library — but a
+reader that lacks ``zstandard`` cannot read what a writer with it produced.
+Install the ``cachetic[zstd]`` extra on both ends, or on neither.
+
+Both entry points are safe to call from several threads at once. That is not
+free: ``zstandard``'s one-shot ``compress``/``decompress`` reuse an internal C
+context, so the contexts are held per thread rather than shared.
+"""
+
 import logging
+import threading
+import typing
 import zlib
 from typing import Literal
 
 from cachetic.extensions.compression import DecompressionError
 
+if typing.TYPE_CHECKING:
+    import zstandard
+
 logger = logging.getLogger(__name__)
 
-# Try to import zstandard (pip install zstandard)
-# This prepares the code for future Python versions or environments with zstd support.
+# Declared by the 'zstd' extra; absent installations transparently use zlib.
 try:
-    import zstandard as zstd
+    import zstandard
 
     HAS_ZSTD = True
-    _ZSTD_COMPRESSOR: "zstd.ZstdCompressor" = zstd.ZstdCompressor(level=3)
-    _ZSTD_DECOMPRESSOR: "zstd.ZstdDecompressor" = zstd.ZstdDecompressor()
     logger.debug("Zstandard library found")
 except ImportError:
     HAS_ZSTD = False
-    _ZSTD_COMPRESSOR = None  # type: ignore[assignment]
-    _ZSTD_DECOMPRESSOR = None  # type: ignore[assignment]
     logger.debug("Zstandard library not found")
-
 
 # Zstd frame magic header (Little Endian: 0xFD2FB528 -> Bytes: 28 B5 2F FD)
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 # Zlib default header usually starts with 0x78 (Deflate)
 ZLIB_MAGIC = b"\x78"
 
+_ZSTD_LEVEL = 3
+
+# One compressor and one decompressor per thread. A single module-level pair is
+# what the obvious implementation reaches for and is unsafe: zstandard's
+# one-shot API reuses an internal C context per object, so concurrent calls on
+# the same instance corrupt each other's frames and can segfault the
+# interpreter. Cachetic clients are explicitly designed to be shared, which puts
+# this squarely on the hot path. Thread-local keeps the "build it once" saving
+# without the sharing.
+_ZSTD_LOCAL = threading.local()
+
 
 def might_compressed(data: bytes) -> bool:
     """
     Checks if the data might be compressed.
     """
-    return data.startswith(ZSTD_MAGIC) or data.startswith(ZLIB_MAGIC)
+    return data.startswith((ZSTD_MAGIC, ZLIB_MAGIC))
 
 
-def compress_auto(
-    data: bytes, method: Literal["auto", "zstd", "zlib"] = "auto"
-) -> bytes:
+def compress_auto(data: bytes, method: Literal["auto", "zstd", "zlib"] = "auto") -> bytes:
     """
     Compresses data using the best available algorithm or the specified method.
 
@@ -58,19 +79,16 @@ def compress_auto(
     use_zstd = False
     if method == "zstd":
         if not HAS_ZSTD:
-            raise ImportError(
-                "Method 'zstd' requested but zstandard library is not installed."
-            )
+            raise ImportError("Method 'zstd' requested but zstandard library is not installed.")
         use_zstd = True
     elif method == "auto":
         use_zstd = HAS_ZSTD  # Use zstd if we have it, else zlib
 
     # Execute compression
     if use_zstd:
-        return _ZSTD_COMPRESSOR.compress(data)
-    else:
-        # level=6 is zlib default balance
-        return zlib.compress(data, level=6)
+        return _zstd_compressor().compress(data)
+    # level=6 is zlib default balance
+    return zlib.compress(data, level=6)
 
 
 def decompress_auto(data: bytes) -> bytes:
@@ -93,35 +111,52 @@ def decompress_auto(data: bytes) -> bytes:
     Raises:
         DecompressionError: If a valid Zstd header is found but data is corrupted,
                             or if zstd data is found but the library is missing.
-    """  # noqa: E501
+    """
     if not data or len(data) < 2:
         return data
 
     # 1. Zstandard Detection (High Confidence)
     if data.startswith(ZSTD_MAGIC):
         if not HAS_ZSTD:
-            # We identified it's Zstd, but we can't process it.
-            # This is a system configuration error, not a data error.
+            # We identified it's Zstd, but we can't process it. This is a system
+            # configuration error, not a data error: something wrote this value
+            # from an environment that had zstandard installed.
             raise DecompressionError(
-                "Detected Zstd data but 'zstandard' library is not installed."
+                "Detected Zstd data but the 'zstandard' library is not "
+                "installed. Install it with: pip install cachetic[zstd]"
             )
 
         try:
-            return _ZSTD_DECOMPRESSOR.decompress(data)
+            return _zstd_decompressor().decompress(data)
         except Exception as e:
-            logger.error(f"Detect Zstd header but decompression failed: {str(e)}")
-            raise DecompressionError(f"Zstd decompression failed: {str(e)}") from e
+            logger.error(f"Detect Zstd header but decompression failed: {e!s}")
+            raise DecompressionError(f"Zstd decompression failed: {e!s}") from e
 
     # 2. Zlib Detection (Medium Confidence)
     if data.startswith(ZLIB_MAGIC):
         try:
             return zlib.decompress(data)
         except zlib.error:
-            logger.warning(
-                "Detect Zlib header but decompression failed, "
-                + "it might be raw data starting with 0x78."
-            )
+            logger.warning("Detect Zlib header but decompression failed, it might be raw data starting with 0x78.")
             return data
 
     # 3. Raw Data
     return data
+
+
+def _zstd_compressor() -> "zstandard.ZstdCompressor":
+    """Returns this thread's compressor, building it on first use."""
+    compressor: zstandard.ZstdCompressor | None = getattr(_ZSTD_LOCAL, "compressor", None)
+    if compressor is None:
+        compressor = zstandard.ZstdCompressor(level=_ZSTD_LEVEL)
+        _ZSTD_LOCAL.compressor = compressor
+    return compressor
+
+
+def _zstd_decompressor() -> "zstandard.ZstdDecompressor":
+    """Returns this thread's decompressor, building it on first use."""
+    decompressor: zstandard.ZstdDecompressor | None = getattr(_ZSTD_LOCAL, "decompressor", None)
+    if decompressor is None:
+        decompressor = zstandard.ZstdDecompressor()
+        _ZSTD_LOCAL.decompressor = decompressor
+    return decompressor
