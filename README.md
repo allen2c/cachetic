@@ -61,7 +61,7 @@ from cachetic.aio import close_all
 async def main():
     cache = AsyncCachetic[Person](
         object_type=pydantic.TypeAdapter(Person),
-        cache_url="redis://localhost:6379/0",
+        cache_url=".cache",   # or "redis://localhost:6379/0", unchanged otherwise
     )
 
     await cache.set("user:1", Person(name="Alice", age=30))
@@ -85,11 +85,16 @@ so closing is process-wide rather than per-instance: one instance closing must
 not break another's client. Both halves expose the same call:
 
 ```python
+import asyncio
 import cachetic
 from cachetic.aio import close_all as aclose_all
 
-cachetic.close_all()   # sync clients
-await aclose_all()     # async clients, before the event loop exits
+cachetic.close_all()       # sync clients
+
+async def shutdown():
+    await aclose_all()     # async clients, before the event loop exits
+
+asyncio.run(shutdown())
 ```
 
 Either is safe to call more than once, and a cache used again afterwards
@@ -158,7 +163,7 @@ sync and async clients read all of it identically.
 | `pool_max_size`   | `8`              | Ceiling on concurrent connections    |
 
 ```python
-cache_url="postgresql://user:pass@host/mydb?table=cache&pool_min_size=2&pool_max_size=20"
+cache_url = "postgresql://user:pass@host/mydb?table=cache&pool_min_size=2&pool_max_size=20"
 ```
 
 One warm connection is the default because a cache is optional infrastructure and
@@ -190,21 +195,59 @@ Install the `zstd` extra on every process that shares a cache, or on none of the
 writer that has `zstandard` prefers it, and a reader without the library cannot
 decompress what that writer produced.
 
+## Data URL Format (v0.7.0)
+
+Cachetic serializes values as [Data URLs](https://developer.mozilla.org/en-US/docs/Web/URI/Schemes/data):
+
+```data-url
+data:application/json;compression=zstd;base64,<payload>
+```
+
+The compression algorithm is embedded in the URL itself, so the **reader doesn't need
+to know the writer's settings**. No migration is required: anything that is not one of
+the exact headers Cachetic emits is read as pre-v0.7.0 data.
+
+**Reading pre-v0.7.0 `bytes` values.** Values written before v0.7.0 carry no algorithm
+marker, and every byte string is a valid `bytes`, so there is nothing to detect. A
+`bytes` cache reading data written by v0.5.x or v0.6.x needs `compression` set the way
+the writer had it. Other value types are unaffected, and values written from v0.7.0 on
+are self-describing.
+
 ## Configuration
 
 | Parameter     | Type                   | Default | Description                              |
 |---------------|------------------------|---------|------------------------------------------|
 | `object_type` | `TypeAdapter[T]`       | —       | Pydantic type adapter for serialization  |
 | `cache_url`   | `str \| pathlib.Path`  | —       | Backend URL or local path                |
-| `default_ttl` | `int`                  | `-1`    | TTL in seconds (`-1` = no expiry)        |
+| `default_ttl` | `int`                  | `-1`    | TTL in seconds (`-1` = no expiry, `0` = off) |
 | `prefix`      | `str`                  | `""`    | Key prefix for all operations            |
 | `compression` | `bool`                 | `False` | Compress values before storage           |
 
 ### TTL
 
 ```python
-cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), default_ttl=3600)  # 1h
+cache = Cachetic[str](
+    object_type=pydantic.TypeAdapter(str),
+    cache_url=".cache",
+    default_ttl=3600,              # 1h
+)
 cache.set("key", "value", ex=300)  # per-call override: 5 min
+cache.set("key", "value", ex=0)    # skip this write; leaves any existing entry
+```
+
+`default_ttl=0` is different: it turns the whole client off. Reads miss and writes
+are dropped, so caching can be disabled from configuration alone. It does not
+evict — values another client wrote stay where they are.
+
+```python
+off = Cachetic[str](
+    object_type=pydantic.TypeAdapter(str),
+    cache_url=".cache",
+    default_ttl=0,
+)
+off.set("key", "value")
+assert off.get("key") is None
+assert off.exists("key") is False
 ```
 
 > **Expiry precision.** Redis and diskcache enforce deadlines themselves. The
@@ -226,13 +269,13 @@ export CACHETIC_COMPRESSION=true
 
 ## API Reference
 
-| Method                        | Returns       | Description                            |
-|-------------------------------|---------------|----------------------------------------|
-| `get(key)`                    | `T \| None`   | Retrieve value, or `None` on miss      |
-| `get_or_raise(key)`           | `T`           | Retrieve value, or raise on miss       |
-| `set(key, value, ex=None)`    | `None`        | Store value with optional TTL          |
-| `delete(key)`                 | `None`        | Remove a key                           |
-| `exists(key)`                 | `bool`        | Check if a key exists                  |
+| Method                        | Returns       | Description                                  |
+|-------------------------------|---------------|----------------------------------------------|
+| `get(key, default=None)`      | `T \| None`   | Retrieve value, or `default` on miss         |
+| `get_or_raise(key)`           | `T`           | Retrieve value, or raise on miss             |
+| `set(key, value, ex=None)`    | `None`        | Store value with optional TTL                |
+| `delete(key)`                 | `None`        | Remove a key                                 |
+| `exists(key)`                 | `bool`        | Check if a key exists                        |
 
 `AsyncCachetic` exposes the same five methods as coroutines. Each half also has a
 module-level teardown: `cachetic.close_all()` and `cachetic.aio.close_all()`.
@@ -240,9 +283,18 @@ module-level teardown: `cachetic.close_all()` and `cachetic.aio.close_all()`.
 ```python
 from cachetic import CacheNotFoundError
 
-result = cache.get("missing")          # None
-cache.get_or_raise("missing")          # raises CacheNotFoundError
+assert cache.get("missing") is None
+assert cache.get("missing", "fallback") == "fallback"
+
+try:
+    cache.get_or_raise("missing")
+except CacheNotFoundError:
+    pass
 ```
+
+`default` is returned only for a genuine miss. A cache whose type includes `None`
+can store `None`, and reading that back is a hit — it returns `None`, not
+`default`, and `get_or_raise` does not raise on it.
 
 ## Upgrading to v0.7.0
 
@@ -265,7 +317,7 @@ part of your environment.
 backends and the `CacheProtocol` signature. Only affects code calling the adapter
 directly rather than through `Cachetic`.
 
-```python
+```text
 # before
 mongo_cache.set(name="key", value=b"...")
 # after
@@ -277,7 +329,27 @@ mongo_cache.set("key", b"...")
 writer that has the library prefers zstd, and a reader without it cannot
 decompress the result.
 
-**4. The PostgreSQL backend no longer uses peewee.** Both clients talk to psycopg
+**4. `get`, `set`, `delete` and `get_or_raise` no longer accept `*args, **kwargs`.**
+They took them and silently ignored them, so `cache.get("key", "fallback")` — the
+`dict.get` habit — threw the fallback away and returned `None`. `get` now has a
+real `default` parameter; the other three take exactly their documented arguments,
+and anything else is a `TypeError`.
+
+```python
+cache.get("missing", "fallback")   # "fallback" — used to be None
+```
+
+**5. `default_ttl=0` now disables reads as well as writes.** It was documented as
+"disable cache" but only dropped writes, so a client configured to turn caching
+off kept serving whatever an earlier client had written. Reads now miss and
+`exists` reports `False`. A per-call `ex=0` is unchanged: it skips that one write
+and leaves any existing entry alone.
+
+**6. `get_or_raise` no longer raises on a stored `None`.** For a cache whose type
+includes `None`, a key holding `None` is a hit — it used to be indistinguishable
+from a miss, so `get_or_raise` raised on keys that `exists` reported as present.
+
+**7. The PostgreSQL backend no longer uses peewee.** Both clients talk to psycopg
 directly, so `pip install cachetic[postgres]` no longer pulls in an ORM, the
 whole connection URL reaches psycopg (`sslmode` and friends now work on the sync
 client too), and the pool keeps **one** connection warm instead of four. Raise it

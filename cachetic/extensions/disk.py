@@ -2,7 +2,9 @@
 
 Wraps ``diskcache.Cache`` to provide a unified cache interface. Cache handles
 are shared per resolved path through :mod:`cachetic.extensions._registry`, and
-released by :func:`cachetic.close_all`.
+released by :func:`cachetic.close_all` — or by
+:func:`cachetic.aio.close_all`, which closes this namespace too because the
+async disk adapter shares these same synchronous handles.
 """
 
 import logging
@@ -16,12 +18,6 @@ from cachetic.types.cache_protocol import CacheProtocol
 
 logger = logging.getLogger(__name__)
 
-_NAMESPACE = "disk"
-
-
-def _close(cache: diskcache.Cache) -> None:
-    cache.close()
-
 
 class DiskCacheAdapter(CacheProtocol):
     """Adapts ``diskcache.Cache`` to the ``CacheProtocol`` interface.
@@ -34,7 +30,7 @@ class DiskCacheAdapter(CacheProtocol):
     def __init__(self, path: str | pathlib.Path) -> None:
         resolved: str = str(pathlib.Path(path).resolve())
         self._entry = _registry.EntryHandle(
-            _NAMESPACE,
+            _registry.DISK_NAMESPACE,
             resolved,
             factory=lambda: diskcache.Cache(resolved),
             close=_close,
@@ -58,3 +54,7 @@ class DiskCacheAdapter(CacheProtocol):
 
     def exists(self, key: str, /) -> bool:
         return key in self._cache
+
+
+def _close(cache: diskcache.Cache) -> None:
+    cache.close()

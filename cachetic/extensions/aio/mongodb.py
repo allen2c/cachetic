@@ -26,10 +26,6 @@ logger = logging.getLogger(__name__)
 _NAMESPACE = "mongodb"
 
 
-async def _close(client: pymongo.AsyncMongoClient) -> None:
-    await client.close()
-
-
 class AsyncMongoCache(AsyncCacheProtocol):
     """A cache that uses MongoDB as a backend, over pymongo's async client."""
 
@@ -50,9 +46,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
         self._entry = _registry.EntryHandle(
             _NAMESPACE,
             parts.db_url,
-            factory=lambda: pymongo.AsyncMongoClient(
-                parts.db_url, document_class=DocumentParam
-            ),
+            factory=lambda: pymongo.AsyncMongoClient(parts.db_url, document_class=DocumentParam),
             close=_close,
         )
 
@@ -70,9 +64,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
                 return col
             await col.create_index("name", unique=True)
             entry.ensured.add(index_key)
-            logger.debug(
-                f"Ensured unique index on 'name' in collection: {self._collection}"
-            )
+            logger.debug(f"Ensured unique index on 'name' in collection: {self._collection}")
         return col
 
     async def _delete_if_expired(self, col, key: str, expires_at: int) -> None:
@@ -100,9 +92,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
             f"ex={expires_at}"
         )
 
-        await col.update_one(
-            {"name": key}, {"$set": {"value": value, "ex": expires_at}}, upsert=True
-        )
+        await col.update_one({"name": key}, {"$set": {"value": value, "ex": expires_at}}, upsert=True)
 
     async def get(self, key: str, /) -> bytes | None:
         """Retrieves a value by key.
@@ -121,9 +111,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
             return doc["value"]
 
         if expires_at < int(time.time()):
-            logger.debug(
-                f"[AsyncMongoCache.get] Key='{key}' expired at {expires_at}. Deleting."
-            )
+            logger.debug(f"[AsyncMongoCache.get] Key='{key}' expired at {expires_at}. Deleting.")
             await self._delete_if_expired(col, key, expires_at)
             return None
 
@@ -147,3 +135,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
             await self._delete_if_expired(col, key, expires_at)
             return False
         return True
+
+
+async def _close(client: pymongo.AsyncMongoClient) -> None:
+    await client.close()

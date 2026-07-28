@@ -14,9 +14,6 @@ from durl import DURL
 from cachetic import Cachetic
 from cachetic.utils.compression import HAS_ZSTD, compress_auto
 
-if HAS_ZSTD:
-    import zstandard as zstd
-
 
 class Person(pydantic.BaseModel):
     name: str
@@ -42,9 +39,7 @@ class TestDurlReadPath:
             object_type=PERSON_ADAPTER,
             cache_url=temp_cache_url,
         )
-        durl_bytes: bytes = str(
-            DURL.build(mime_type="application/json", data=PERSON_JSON)
-        ).encode("utf-8")
+        durl_bytes: bytes = str(DURL.build(mime_type="application/json", data=PERSON_JSON)).encode("utf-8")
         cache.cache.set("k", durl_bytes)
         assert cache.get("k") == PERSON
 
@@ -89,9 +84,7 @@ class TestDurlReadPath:
             object_type=BYTES_ADAPTER,
             cache_url=temp_cache_url,
         )
-        durl_bytes: bytes = str(
-            DURL.build(mime_type="application/octet-stream", data=RAW_BYTES)
-        ).encode("utf-8")
+        durl_bytes: bytes = str(DURL.build(mime_type="application/octet-stream", data=RAW_BYTES)).encode("utf-8")
         cache.cache.set("k", durl_bytes)
         assert cache.get("k") == RAW_BYTES
 
@@ -119,7 +112,12 @@ class TestLegacyReadPath:
             cache_url=temp_cache_url,
             compression=True,
         )
-        compressed: bytes = zstd.ZstdCompressor().compress(PERSON_JSON)
+        # Imported here rather than at module scope: the top-level
+        # ``if HAS_ZSTD: import`` idiom leaves the name conditionally bound, and
+        # this is the only place it is used.
+        import zstandard
+
+        compressed: bytes = zstandard.ZstdCompressor().compress(PERSON_JSON)
         cache.cache.set("k", compressed)
         assert cache.get("k") == PERSON
 

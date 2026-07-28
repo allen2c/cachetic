@@ -20,6 +20,22 @@ T = typing.TypeVar("T")
 # downstream code configures logging via the ``cachetic`` logger.
 logger = logging.getLogger("cachetic")
 
+_MIME_BYTES = "application/octet-stream"
+_MIME_JSON = "application/json"
+
+_ZSTD = "zstd"
+_ZLIB = "zlib"
+_COMPRESSION_NAMES = (_ZSTD, _ZLIB)
+
+MISSING: typing.Final = object()
+"""Sentinel for "the backend had no entry", as distinct from a stored ``None``.
+
+``get`` returns its ``default`` only for a real miss. A cache whose ``T``
+includes ``None`` can legitimately store ``None``, and that is a hit — without
+this sentinel ``get_or_raise`` would raise on a key that ``exists`` reports as
+present.
+"""
+
 
 class CacheNotFoundError(Exception):
     """Raised when a cache key is not found."""
@@ -44,8 +60,8 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         default=-1,
         description=(
             "Cache time-to-live (seconds). "
-            "-1: no expiration. "
-            "0: disable cache. "
+            "-1 (the default): store without expiry. "
+            "0: turn this client off — reads miss and writes are dropped. "
             ">0: expire after N seconds."
         ),
     )
@@ -72,9 +88,7 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
     def validate_after_init(self) -> typing.Self:
         """Validates and normalizes fields after model initialization."""
         self.default_ttl = _validate_ttl_value(self.default_ttl)
-        self._is_bytes_type = inspect.isclass(self.object_type._type) and issubclass(
-            self.object_type._type, bytes
-        )
+        self._is_bytes_type = inspect.isclass(self.object_type._type) and issubclass(self.object_type._type, bytes)
         self._durl_prefixes = _durl_prefixes_for(self._is_bytes_type)
         return self
 
@@ -84,6 +98,18 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         from cachetic.utils.hide_url_password import hide_url_password
 
         return hide_url_password(str(self.cache_url))
+
+    @property
+    def disabled(self) -> bool:
+        """True when ``default_ttl=0`` has turned this client off.
+
+        A disabled client misses on every read and drops every write, which is
+        what lets a deployment switch caching off from configuration alone. It
+        does not evict: values another client wrote stay where they are, and a
+        per-call ``ex=0`` still means "do not store *this* value" rather than
+        "remove what is already there".
+        """
+        return self.default_ttl == 0
 
     def get_cache_key(self, key: str, *, with_prefix: bool = True) -> str:
         """Generates cache key with optional prefix.
@@ -210,9 +236,7 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
 
         mime_type: str = _mime_for(self._is_bytes_type)
         if self._is_bytes_type:
-            data_bytes: bytes = typing.cast(
-                bytes, self.object_type.validate_python(value)
-            )
+            data_bytes: bytes = typing.cast(bytes, self.object_type.validate_python(value))
         else:
             data_bytes = self.object_type.dump_json(value)
 
@@ -232,14 +256,6 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         return str(durl).encode("utf-8")
 
 
-_MIME_BYTES = "application/octet-stream"
-_MIME_JSON = "application/json"
-
-_ZSTD = "zstd"
-_ZLIB = "zlib"
-_COMPRESSION_NAMES = (_ZSTD, _ZLIB)
-
-
 def _mime_for(is_bytes_type: bool) -> str:
     """Returns the MIME type :meth:`CacheticBase._dump_any` writes."""
     return _MIME_BYTES if is_bytes_type else _MIME_JSON
@@ -255,9 +271,7 @@ def _durl_prefixes_for(is_bytes_type: bool) -> tuple[bytes, ...]:
     """
     mime: str = _mime_for(is_bytes_type)
     headers: list[str] = [f"data:{mime};base64,"]
-    headers += [
-        f"data:{mime};compression={name};base64," for name in _COMPRESSION_NAMES
-    ]
+    headers += [f"data:{mime};compression={name};base64," for name in _COMPRESSION_NAMES]
     return tuple(header.encode("utf-8") for header in headers)
 
 

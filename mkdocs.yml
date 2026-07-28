@@ -1,10 +1,10 @@
 site_name: Cachetic
 site_description: A simple, type-safe caching library with Pydantic integration
 site_author: Allen Chou
-site_url: https://allenchou.github.io/cachetic
+site_url: https://allen2c.github.io/cachetic
 
-repo_name: allenchou/cachetic
-repo_url: https://github.com/allenchou/cachetic
+repo_name: allen2c/cachetic
+repo_url: https://github.com/allen2c/cachetic
 edit_uri: edit/main/docs/
 
 theme:

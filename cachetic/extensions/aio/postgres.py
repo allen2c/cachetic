@@ -35,9 +35,16 @@ _POOL_OPENED = "\0pool-opened"
 
 _Pool = psycopg_pool.AsyncConnectionPool[typing.Any]
 
+_CONCURRENT_CREATE_ERRORS = (psycopg.errors.DuplicateTable, psycopg.errors.UniqueViolation)
+"""What ``CREATE TABLE IF NOT EXISTS`` raises when it loses a race.
 
-async def _close(pool: _Pool) -> None:
-    await pool.close()
+The entry lock serialises table creation *within* a process, but the registry is
+process-local and ``IF NOT EXISTS`` is not atomic across sessions: the existence
+check and the catalog insert are separate steps, so a fleet starting at once
+against an empty database can have several processes pass the check and one of
+them fail on the insert. The table exists either way, which is all this needed.
+Kept identical to the sync backend — invariant 3 in docs/architecture.md.
+"""
 
 
 class AsyncPostgresCache(AsyncCacheProtocol):
@@ -81,12 +88,14 @@ class AsyncPostgresCache(AsyncCacheProtocol):
                 return pool
             if _POOL_OPENED not in entry.ensured:
                 # Opening is awaitable, which is why the pool is created closed.
-                await pool.open(
-                    wait=True, timeout=_postgres_sql.DEFAULT_POOL_OPEN_TIMEOUT
-                )
+                await pool.open(wait=True, timeout=_postgres_sql.DEFAULT_POOL_OPEN_TIMEOUT)
                 entry.ensured.add(_POOL_OPENED)
-            async with pool.connection() as conn:
-                await conn.execute(_postgres_sql.CREATE_TABLE.format(self._table_ident))
+            try:
+                async with pool.connection() as conn:
+                    await conn.execute(_postgres_sql.CREATE_TABLE.format(self._table_ident))
+            except _CONCURRENT_CREATE_ERRORS:
+                # Caught outside the connection block so its rollback runs first.
+                logger.debug("Table '%s' was created concurrently; treating as ensured", self._table)
             entry.ensured.add(self._table)
             logger.debug("Ensured table '%s' exists", self._table)
 
@@ -148,3 +157,7 @@ class AsyncPostgresCache(AsyncCacheProtocol):
     async def exists(self, key: str, /) -> bool:
         """Checks existence, auto-cleaning expired entries."""
         return await self._fetch(key) is not None
+
+
+async def _close(pool: _Pool) -> None:
+    await pool.close()

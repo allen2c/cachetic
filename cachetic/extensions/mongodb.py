@@ -24,10 +24,6 @@ logger = logging.getLogger(__name__)
 _NAMESPACE = "mongodb"
 
 
-def _close(client: pymongo.MongoClient) -> None:  # type: ignore[type-arg]
-    client.close()
-
-
 class MongoCache(CacheProtocol):
     """A cache that uses MongoDB as a backend."""
 
@@ -49,9 +45,7 @@ class MongoCache(CacheProtocol):
         self._entry = _registry.EntryHandle(
             _NAMESPACE,
             parts.db_url,
-            factory=lambda: pymongo.MongoClient(
-                parts.db_url, document_class=DocumentParam
-            ),
+            factory=lambda: pymongo.MongoClient(parts.db_url, document_class=DocumentParam),
             close=_close,
         )
 
@@ -73,9 +67,7 @@ class MongoCache(CacheProtocol):
             if index_key not in entry.ensured:
                 col.create_index("name", unique=True)
                 entry.ensured.add(index_key)
-                logger.debug(
-                    f"Ensured unique index on 'name' in collection: {self._collection}"
-                )
+                logger.debug(f"Ensured unique index on 'name' in collection: {self._collection}")
         return col
 
     def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
@@ -93,9 +85,7 @@ class MongoCache(CacheProtocol):
             f"ex={expires_at}"
         )
 
-        self.col.update_one(
-            {"name": key}, {"$set": {"value": value, "ex": expires_at}}, upsert=True
-        )
+        self.col.update_one({"name": key}, {"$set": {"value": value, "ex": expires_at}}, upsert=True)
 
     def get(self, key: str, /) -> bytes | None:
         """Retrieves a value by key.
@@ -116,10 +106,7 @@ class MongoCache(CacheProtocol):
             return doc["value"]
 
         if expires_at < int(time.time()):
-            logger.debug(
-                f"[MongoCache.get] Key='{key}' expired at {expires_at}, "
-                f"now={int(time.time())}. Deleting."
-            )
+            logger.debug(f"[MongoCache.get] Key='{key}' expired at {expires_at}, now={int(time.time())}. Deleting.")
             self._delete_if_expired(col, key, expires_at)
             return None
 
@@ -152,3 +139,7 @@ class MongoCache(CacheProtocol):
             self._delete_if_expired(col, key, expires_at)
             return False
         return True
+
+
+def _close(client: pymongo.MongoClient) -> None:  # type: ignore[type-arg]
+    client.close()

@@ -17,7 +17,9 @@ import logging
 import threading
 import typing
 
-__all__ = ["BUSY_REGISTRY_SIZE", "Entry", "EntryHandle", "acquire", "close_all"]
+from cachetic.utils.hide_url_password import hide_url_password
+
+__all__ = ["BUSY_REGISTRY_SIZE", "DISK_NAMESPACE", "Entry", "EntryHandle", "acquire", "close_all"]
 
 logger = logging.getLogger("cachetic")
 
@@ -34,6 +36,66 @@ without bound, each entry holding connections. Real deployments talk to a
 handful of backends. Shared by both registries so the two cannot disagree.
 """
 
+DISK_NAMESPACE = "disk"
+"""Namespace holding the shared ``diskcache.Cache`` handles.
+
+Named here rather than in the disk adapter because the *async* half has to
+release them too. ``diskcache`` has no async API and its handles are not bound
+to an event loop, so async disk adapters share these synchronous entries and
+:func:`cachetic.aio.close_all` has no per-loop entry of its own to close.
+"""
+
+# Forward-referenced: Entry is defined below, after the public functions.
+_registry: dict[_RegistryKey, "Entry"] = {}
+_registry_lock = threading.Lock()
+_warned_busy = False
+
+
+def acquire(
+    namespace: str,
+    url: str,
+    *,
+    factory: typing.Callable[[], typing.Any],
+    close: CloseFn,
+) -> "Entry":
+    """Returns the shared entry for ``(namespace, url)``.
+
+    ``factory`` is called at most once per key. The lock makes the
+    check-then-act atomic: without it two threads racing a cold cache each build
+    a client, and for PostgreSQL each then races a ``CREATE TABLE IF NOT
+    EXISTS`` — which is not atomic across concurrent transactions.
+    """
+    key: _RegistryKey = (namespace, url)
+
+    with _registry_lock:
+        entry: Entry | None = _registry.get(key)
+        if entry is None:
+            entry = Entry(client=factory(), close=close)
+            _registry[key] = entry
+            # Masked at every log site: the key has to stay the raw URL, but
+            # for Redis, MongoDB and PostgreSQL that raw URL carries the
+            # password, and the adapters that hand it here have already
+            # redacted their own log lines.
+            logger.debug("Created new %s client for: %s", namespace, hide_url_password(url))
+            _warn_if_busy_locked()
+        else:
+            logger.debug("Reusing existing %s client for: %s", namespace, hide_url_password(url))
+        return entry
+
+
+def close_all() -> None:
+    """Closes every shared sync client and empties the registry.
+
+    Call it before a process forks, at shutdown, or between test cases. It is
+    safe to call more than once and safe to call when nothing is open. Adapters
+    hold an :class:`EntryHandle` rather than an ``Entry``, so a client used again
+    afterwards reconnects instead of failing.
+
+    Operations running on another thread are not waited for; closing a client
+    out from under one surfaces a driver error on that thread.
+    """
+    _close_where(lambda _: True)
+
 
 @dataclasses.dataclass
 class Entry:
@@ -44,11 +106,6 @@ class Entry:
     lock: threading.Lock = dataclasses.field(default_factory=threading.Lock)
     ensured: set[typing.Any] = dataclasses.field(default_factory=set)
     """Setup steps already performed for this client (index names, tables, ...)."""
-
-
-_registry: dict[_RegistryKey, Entry] = {}
-_registry_lock = threading.Lock()
-_warned_busy = False
 
 
 class EntryHandle:
@@ -76,9 +133,32 @@ class EntryHandle:
 
     def __call__(self) -> Entry:
         """Returns the live entry for this backend and URL, creating it if needed."""
-        return acquire(
-            self._namespace, self._url, factory=self._factory, close=self._close
-        )
+        return acquire(self._namespace, self._url, factory=self._factory, close=self._close)
+
+
+def _close_namespace(namespace: str) -> None:
+    """Closes the shared clients of one backend, leaving the rest open.
+
+    Exists for :func:`cachetic.aio.close_all`, which has to release the disk
+    handles under :data:`DISK_NAMESPACE` without touching the sync Redis,
+    MongoDB and PostgreSQL clients an application may still be using.
+    """
+    _close_where(lambda key: key[0] == namespace)
+
+
+def _close_where(matches: typing.Callable[[_RegistryKey], bool]) -> None:
+    """Pops the entries ``matches`` selects and closes them outside the lock."""
+    with _registry_lock:
+        keys: list[_RegistryKey] = [key for key in _registry if matches(key)]
+        entries: list[Entry] = [_registry.pop(key) for key in keys]
+
+    for key, entry in zip(keys, entries, strict=True):
+        try:
+            entry.close(entry.client)
+        except Exception:  # shutdown must never raise
+            logger.warning("Failed to close %s client for: %s", key[0], hide_url_password(key[1]))
+        else:
+            logger.debug("Closed %s client for: %s", key[0], hide_url_password(key[1]))
 
 
 def _warn_if_busy_locked() -> None:
@@ -93,58 +173,6 @@ def _warn_if_busy_locked() -> None:
         "or per tenant will keep opening connections. Reuse a fixed set of URLs.",
         len(_registry),
     )
-
-
-def acquire(
-    namespace: str,
-    url: str,
-    *,
-    factory: typing.Callable[[], typing.Any],
-    close: CloseFn,
-) -> Entry:
-    """Returns the shared entry for ``(namespace, url)``.
-
-    ``factory`` is called at most once per key. The lock makes the
-    check-then-act atomic: without it two threads racing a cold cache each build
-    a client, and for PostgreSQL each then races a ``CREATE TABLE IF NOT
-    EXISTS`` — which is not atomic across concurrent transactions.
-    """
-    key: _RegistryKey = (namespace, url)
-
-    with _registry_lock:
-        entry: Entry | None = _registry.get(key)
-        if entry is None:
-            entry = Entry(client=factory(), close=close)
-            _registry[key] = entry
-            logger.debug("Created new %s client for: %s", namespace, url)
-            _warn_if_busy_locked()
-        else:
-            logger.debug("Reusing existing %s client for: %s", namespace, url)
-        return entry
-
-
-def close_all() -> None:
-    """Closes every shared sync client and empties the registry.
-
-    Call it before a process forks, at shutdown, or between test cases. It is
-    safe to call more than once and safe to call when nothing is open. Adapters
-    hold an :class:`EntryHandle` rather than an ``Entry``, so a client used again
-    afterwards reconnects instead of failing.
-
-    Operations running on another thread are not waited for; closing a client
-    out from under one surfaces a driver error on that thread.
-    """
-    with _registry_lock:
-        keys: list[_RegistryKey] = list(_registry)
-        entries: list[Entry] = [_registry.pop(key) for key in keys]
-
-    for key, entry in zip(keys, entries, strict=True):
-        try:
-            entry.close(entry.client)
-        except Exception:  # shutdown must never raise
-            logger.warning("Failed to close %s client for: %s", key[0], key[1])
-        else:
-            logger.debug("Closed %s client for: %s", key[0], key[1])
 
 
 def _registry_size() -> int:

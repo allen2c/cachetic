@@ -7,11 +7,16 @@ dependencies = [
   "pydantic-settings",
 ]
 description = "Simple cache with pydantic."
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
 version = "0.7.0"
+
+[project.urls]
+Documentation = "https://allen2c.github.io/cachetic"
+Repository = "https://github.com/allen2c/cachetic"
 
 [project.optional-dependencies]
 mongodb = ["pymongo (>=4.9)"]                  # 4.9 introduced AsyncMongoClient
@@ -38,15 +43,17 @@ ruff = "*"
 zstandard = "*"
 
 [tool.black]
+line-length = 120
 target-version = ["py311"]
 
 [tool.isort]
+line_length = 120
 profile = "black"
 
 # Pin the rule set explicitly: without this, ruff's defaults drift between
 # releases and CI can start failing on untouched code.
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -67,6 +74,15 @@ select = [
   "UP",  # pyupgrade
   "W",   # pycodestyle warnings
 ]
+
+# Pinned for the same reason as the ruff block above: without an explicit mode
+# and version, pyright's defaults drift between releases. Optional backends are
+# dev dependencies, so run it against the project environment — a bare `pyright`
+# on an interpreter without them reports every extra as a missing import.
+[tool.pyright]
+include = ["cachetic", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

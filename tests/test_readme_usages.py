@@ -83,28 +83,20 @@ class TestAsyncUsage:
         finally:
             await close_all()
 
-    async def test_sync_and_async_read_each_other(
-        self, redis_connection_string: str, temp_cache_url: pathlib.Path
-    ):
+    async def test_sync_and_async_read_each_other(self, redis_connection_string: str, temp_cache_url: pathlib.Path):
         """README claims both clients read each other's data on every backend."""
         from cachetic import AsyncCachetic
         from cachetic.aio import close_all
 
         for url in (redis_connection_string, temp_cache_url):
-            async_cache = AsyncCachetic[Person](
-                object_type=pydantic.TypeAdapter(Person), cache_url=url
-            )
-            sync_cache = Cachetic[Person](
-                object_type=pydantic.TypeAdapter(Person), cache_url=url
-            )
+            async_cache = AsyncCachetic[Person](object_type=pydantic.TypeAdapter(Person), cache_url=url)
+            sync_cache = Cachetic[Person](object_type=pydantic.TypeAdapter(Person), cache_url=url)
             try:
                 await async_cache.set("readme_interop", Person(name="Bob", age=25))
                 assert sync_cache.get("readme_interop") == Person(name="Bob", age=25)
 
                 sync_cache.set("readme_interop", Person(name="Carol", age=41))
-                assert await async_cache.get("readme_interop") == Person(
-                    name="Carol", age=41
-                )
+                assert await async_cache.get("readme_interop") == Person(name="Carol", age=41)
             finally:
                 await async_cache.delete("readme_interop")
                 await close_all()
@@ -116,9 +108,7 @@ class TestPrimitiveTypes:
     def test_string_cache_example(self, temp_cache_url: pathlib.Path):
         """Test string cache example from README."""
         # String cache
-        str_cache = Cachetic[str](
-            object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url
-        )
+        str_cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url)
 
         str_cache.set("greeting", "Hello, World!")
         result = str_cache.get("greeting")
@@ -128,9 +118,7 @@ class TestPrimitiveTypes:
     def test_list_cache_example(self, temp_cache_url: pathlib.Path):
         """Test list cache example from README."""
         # List cache
-        list_cache = Cachetic[list[str]](
-            object_type=pydantic.TypeAdapter(list[str]), cache_url=temp_cache_url
-        )
+        list_cache = Cachetic[list[str]](object_type=pydantic.TypeAdapter(list[str]), cache_url=temp_cache_url)
 
         list_cache.set("items", ["apple", "banana", "cherry"])
         result = list_cache.get("items")
@@ -146,9 +134,7 @@ class TestComplexTypes:
         """Test dictionary cache example from README."""
         # Dictionary cache
         data = {"users": [{"id": 1, "name": "Alice"}], "total": 1}
-        dict_cache = Cachetic[dict](
-            object_type=pydantic.TypeAdapter(dict), cache_url=temp_cache_url
-        )
+        dict_cache = Cachetic[dict](object_type=pydantic.TypeAdapter(dict), cache_url=temp_cache_url)
 
         dict_cache.set("user_data", data)
         result = dict_cache.get("user_data")
@@ -160,9 +146,7 @@ class TestComplexTypes:
     def test_list_of_models_example(self, temp_cache_url: pathlib.Path):
         """Test list of models example from README."""
         # List of models
-        people_cache = Cachetic[list[Person]](
-            object_type=pydantic.TypeAdapter(list[Person]), cache_url=temp_cache_url
-        )
+        people_cache = Cachetic[list[Person]](object_type=pydantic.TypeAdapter(list[Person]), cache_url=temp_cache_url)
 
         people = [Person(name="Alice", age=30), Person(name="Bob", age=25)]
         people_cache.set("team", people)
@@ -207,9 +191,7 @@ class TestTTLExamples:
 
     def test_per_operation_ttl_example(self, temp_cache_url: pathlib.Path):
         """Test per-operation TTL example from README."""
-        cache = Cachetic[str](
-            object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url
-        )
+        cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url)
 
         # Per-operation TTL
         cache.set("key", "value", ex=300)  # 5 minutes
@@ -235,9 +217,7 @@ class TestErrorHandling:
 
     def test_get_returns_none_example(self, temp_cache_url: pathlib.Path):
         """Test that get() returns None for missing keys as shown in README."""
-        cache = Cachetic[str](
-            object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url
-        )
+        cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url)
 
         # get() returns None for missing keys
         result = cache.get("nonexistent")
@@ -245,9 +225,7 @@ class TestErrorHandling:
 
     def test_get_or_raise_throws_exception_example(self, temp_cache_url: pathlib.Path):
         """Test get_or_raise() throws exception as shown in README."""
-        cache = Cachetic[str](
-            object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url
-        )
+        cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url)
 
         # get_or_raise() throws exception
         with pytest.raises(CacheNotFoundError):
@@ -257,9 +235,7 @@ class TestErrorHandling:
 class TestEnvironmentVariables:
     """Test environment variable configuration."""
 
-    def test_prefixed_env_vars_are_honoured(
-        self, monkeypatch: pytest.MonkeyPatch, temp_cache_url: pathlib.Path
-    ):
+    def test_prefixed_env_vars_are_honoured(self, monkeypatch: pytest.MonkeyPatch, temp_cache_url: pathlib.Path):
         """Every field is configurable via a CACHETIC_-prefixed env var."""
         monkeypatch.setenv("CACHETIC_CACHE_URL", str(temp_cache_url))
         monkeypatch.setenv("CACHETIC_DEFAULT_TTL", "3600")
@@ -274,9 +250,7 @@ class TestEnvironmentVariables:
         assert cache.prefix == "myapp"
         assert cache.compression is True
 
-    def test_bare_env_vars_are_ignored(
-        self, monkeypatch: pytest.MonkeyPatch, temp_cache_url: pathlib.Path
-    ):
+    def test_bare_env_vars_are_ignored(self, monkeypatch: pytest.MonkeyPatch, temp_cache_url: pathlib.Path):
         """Unprefixed names must not leak in (breaking change in v0.7.0).
 
         Before v0.7.0 the settings model had no ``env_prefix``, so generic names
@@ -287,9 +261,7 @@ class TestEnvironmentVariables:
         monkeypatch.setenv("PREFIX", "leaked")
         monkeypatch.setenv("COMPRESSION", "true")
 
-        cache = Cachetic[str](
-            object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url
-        )
+        cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url)
 
         assert cache.prefix == ""
         assert cache.compression is False
@@ -318,9 +290,7 @@ class TestWorkingExamples:
 
     def test_multiple_cache_instances(self, temp_cache_url: pathlib.Path):
         """Test that multiple cache instances work independently."""
-        str_cache = Cachetic[str](
-            object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url / "strings"
-        )
+        str_cache = Cachetic[str](object_type=pydantic.TypeAdapter(str), cache_url=temp_cache_url / "strings")
 
         person_cache = Cachetic[Person](
             object_type=pydantic.TypeAdapter(Person),
@@ -349,9 +319,7 @@ class TestWorkingExamples:
             "stats": {"total_users": 2, "active_sessions": [1, 2]},
         }
 
-        cache = Cachetic[dict](
-            object_type=pydantic.TypeAdapter(dict), cache_url=temp_cache_url
-        )
+        cache = Cachetic[dict](object_type=pydantic.TypeAdapter(dict), cache_url=temp_cache_url)
 
         cache.set("complex_data", complex_data)
         result = cache.get("complex_data")

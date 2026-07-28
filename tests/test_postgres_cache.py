@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import time
 from pprint import pformat
 from unittest.mock import patch
@@ -127,9 +128,7 @@ def _describe_table(cache: PostgresCache, table: str) -> list[tuple]:
 def _drop_tables(cache: PostgresCache, *tables: str) -> None:
     with cache._ready_pool().connection() as conn:
         for table in tables:
-            conn.execute(
-                sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(table))
-            )
+            conn.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(table)))
 
 
 def test_sync_and_async_share_one_ddl_definition():
@@ -157,12 +156,8 @@ def test_async_ddl_matches_sync_ddl(postgres_connection_string: str):
     sync_table = "ddl_check_sync"
     async_table = "ddl_check_async"
 
-    sync_url = postgres_connection_string.replace(
-        "table=test_cache", f"table={sync_table}"
-    )
-    async_url = postgres_connection_string.replace(
-        "table=test_cache", f"table={async_table}"
-    )
+    sync_url = postgres_connection_string.replace("table=test_cache", f"table={sync_table}")
+    async_url = postgres_connection_string.replace("table=test_cache", f"table={async_table}")
 
     try:
         _drop_tables(PostgresCache(sync_url), sync_table, async_table)
@@ -239,9 +234,7 @@ def test_libpq_options_reach_both_backends(postgres_connection_string: str):
             cache = AsyncPostgresCache(url)
             pool = await cache._ready_pool()
             async with pool.connection() as conn:
-                cursor = await conn.execute(
-                    "SELECT current_setting('application_name')"
-                )
+                cursor = await conn.execute("SELECT current_setting('application_name')")
                 row = await cursor.fetchone()
             await close_all()
             assert row is not None
@@ -331,3 +324,71 @@ def test_expired_cleanup_does_not_drop_a_concurrent_write(
     finally:
         PostgresCache(postgres_connection_string).delete(key)
         _clear_postgres_registries()
+
+
+# --- Losing the CREATE TABLE race to another process ---
+
+
+def test_concurrent_create_table_is_not_a_startup_failure(postgres_connection_string: str):
+    """A DuplicateTable from another process must be treated as "already there".
+
+    The entry lock serialises CREATE TABLE within one process, but the registry
+    is process-local and `IF NOT EXISTS` is not atomic across sessions: the
+    existence check and the catalog insert are separate steps. A fleet starting
+    at once against an empty database can have one instance raise instead of
+    starting.
+    """
+    _clear_postgres_registries()
+    try:
+        cache = PostgresCache(postgres_connection_string)
+        cache._ready_pool()  # open the pool for real, then redo just the DDL step
+        entry = cache._entry()
+        entry.ensured.discard(cache._table)
+
+        class _LosingConnection:
+            def execute(self, *_args, **_kwargs):
+                raise psycopg.errors.DuplicateTable(f'relation "{cache._table}" already exists')
+
+        @contextlib.contextmanager
+        def _connection(*_args, **_kwargs):
+            yield _LosingConnection()
+
+        with patch.object(entry.client, "connection", _connection):
+            cache._ready_pool()  # must not raise
+
+        assert cache._table in entry.ensured
+        # The pool is still usable — nothing was left in a failed transaction.
+        cache.set("create_race", b"value", -1)
+        assert cache.get("create_race") == b"value"
+        cache.delete("create_race")
+    finally:
+        _clear_postgres_registries()
+
+
+def test_async_concurrent_create_table_is_not_a_startup_failure(postgres_connection_string: str):
+    """The async backend must handle the race identically — invariant 3."""
+    from cachetic.extensions.aio import _registry as aio_registry
+    from cachetic.extensions.aio.postgres import AsyncPostgresCache
+
+    async def go() -> bool:
+        cache = AsyncPostgresCache(postgres_connection_string)
+        await cache._ready_pool()
+        entry = cache._entry()
+        entry.ensured.discard(cache._table)
+
+        class _LosingConnection:
+            async def execute(self, *_args, **_kwargs):
+                raise psycopg.errors.DuplicateTable(f'relation "{cache._table}" already exists')
+
+        @contextlib.asynccontextmanager
+        async def _connection(*_args, **_kwargs):
+            yield _LosingConnection()
+
+        try:
+            with patch.object(entry.client, "connection", _connection):
+                await cache._ready_pool()  # must not raise
+            return cache._table in entry.ensured
+        finally:
+            await aio_registry.close_all()
+
+    assert asyncio.run(go()) is True

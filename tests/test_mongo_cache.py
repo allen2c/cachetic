@@ -171,9 +171,7 @@ def test_expired_cleanup_does_not_drop_a_concurrent_write(mongo_connection_strin
                 MongoCache(mongo_connection_string).set(key, b"fresh", -1)
             return doc
 
-        with patch.object(
-            pymongo.collection.Collection, "find_one", find_one_then_rewrite
-        ):
+        with patch.object(pymongo.collection.Collection, "find_one", find_one_then_rewrite):
             assert backend.get(key) is None
 
         assert rewritten, "the simulated concurrent write never ran"

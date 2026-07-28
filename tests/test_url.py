@@ -24,9 +24,7 @@ class TestParseMongoUrl:
         assert "collection=" not in parts.db_url
 
     def test_keeps_other_query_parameters(self) -> None:
-        parts = parse_mongo_url(
-            "mongodb://host/mydb?collection=c&replicaSet=rs0&authSource=admin"
-        )
+        parts = parse_mongo_url("mongodb://host/mydb?collection=c&replicaSet=rs0&authSource=admin")
         assert "replicaSet=rs0" in parts.db_url
         assert "authSource=admin" in parts.db_url
 
@@ -75,9 +73,7 @@ class TestParsePostgresUrl:
 
     def test_keeps_libpq_options(self) -> None:
         """Anything but ``table=`` must reach psycopg untouched."""
-        parts = parse_postgres_url(
-            "postgresql://u:p@host:5432/mydb?table=t&sslmode=require&connect_timeout=3"
-        )
+        parts = parse_postgres_url("postgresql://u:p@host:5432/mydb?table=t&sslmode=require&connect_timeout=3")
         assert "sslmode=require" in parts.db_url
         assert "connect_timeout=3" in parts.db_url
         assert parts.db_url.startswith("postgresql://u:p@host:5432/mydb")
@@ -117,16 +113,12 @@ class TestPostgresPoolSizing:
         assert DEFAULT_POOL_MAX_SIZE > DEFAULT_POOL_MIN_SIZE
 
     def test_reads_both_sizes(self) -> None:
-        parts = parse_postgres_url(
-            "postgresql://host/mydb?pool_min_size=2&pool_max_size=20"
-        )
+        parts = parse_postgres_url("postgresql://host/mydb?pool_min_size=2&pool_max_size=20")
         assert (parts.pool_min_size, parts.pool_max_size) == (2, 20)
 
     def test_pool_parameters_are_stripped_from_the_conninfo(self) -> None:
         """psycopg rejects query parameters it does not recognise."""
-        parts = parse_postgres_url(
-            "postgresql://host/mydb?pool_min_size=2&pool_max_size=20&sslmode=require"
-        )
+        parts = parse_postgres_url("postgresql://host/mydb?pool_min_size=2&pool_max_size=20&sslmode=require")
         assert "pool_min_size" not in parts.db_url
         assert "pool_max_size" not in parts.db_url
         assert "sslmode=require" in parts.db_url

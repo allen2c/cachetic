@@ -16,7 +16,8 @@ import pathlib
 import typing
 import urllib.parse
 
-from cachetic._base import (  # noqa: F401  (re-exported for backwards compatibility)
+from cachetic._base import (  # noqa: F401  (the two underscored names are re-exports kept for compatibility)
+    MISSING,
     CacheNotFoundError,
     CacheticBase,
     T,
@@ -67,8 +68,7 @@ class Cachetic(CacheticBase[T]):
                 from cachetic.extensions.redis import RedisCacheAdapter
             except ImportError:
                 raise ImportError(
-                    "Redis support requires the 'redis' package. "
-                    "Install it with: pip install cachetic[redis]"
+                    "Redis support requires the 'redis' package. Install it with: pip install cachetic[redis]"
                 ) from None
             return RedisCacheAdapter(self.cache_url)
         if parsed.scheme.startswith("mongo"):
@@ -76,8 +76,7 @@ class Cachetic(CacheticBase[T]):
                 from cachetic.extensions.mongodb import MongoCache
             except ImportError:
                 raise ImportError(
-                    "MongoDB support requires the 'pymongo' package. "
-                    "Install it with: pip install cachetic[mongodb]"
+                    "MongoDB support requires the 'pymongo' package. Install it with: pip install cachetic[mongodb]"
                 ) from None
             return MongoCache(self.cache_url)
         if parsed.scheme.startswith("postgres"):
@@ -94,16 +93,22 @@ class Cachetic(CacheticBase[T]):
 
         return DiskCacheAdapter(self.cache_url)
 
-    def get(
-        self,
-        key: str,
-        *args,
-        **kwargs,
-    ) -> T | None:
-        """Retrieves and deserializes value from cache.
+    def get(self, key: str, default: T | None = None) -> T | None:
+        """Retrieves and deserializes a value from the cache.
 
-        Returns None if key doesn't exist or cache miss occurs.
+        Args:
+            key: Cache key
+            default: Returned when the key is absent. Defaults to ``None``.
+
+        ``default`` is returned only for a genuine miss. A cache whose ``T``
+        includes ``None`` can store ``None``, and reading it back is a hit —
+        it returns ``None``, not ``default``.
+
+        A client with ``default_ttl=0`` is disabled and misses unconditionally.
         """
+        if self.disabled:
+            return default
+
         _key = self.get_cache_key(key, with_prefix=True)
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -111,40 +116,35 @@ class Cachetic(CacheticBase[T]):
         data = self.cache.get(_key)
 
         if data is None:
-            return None
+            return default
 
         # Load value
         return self._loads_any(data)
 
-    def get_or_raise(
-        self,
-        key: str,
-        *args,
-        **kwargs,
-    ) -> T:
-        """Retrieves value from cache or raises CacheNotFoundError.
+    def get_or_raise(self, key: str) -> T:
+        """Retrieves a value from the cache or raises CacheNotFoundError.
 
-        Similar to get() but throws exception instead of returning None.
+        Like :meth:`get`, but a miss raises instead of returning a default.
+        Distinguishes a missing key from a stored ``None``, so a cache of an
+        optional type does not raise on a key that :meth:`exists` reports.
         """
-        out = self.get(key, *args, **kwargs)
-        if out is None:
+        out = self.get(key, default=typing.cast(T, MISSING))
+        if out is MISSING:
             raise CacheNotFoundError(f"Cache not found for key '{key}'")
-        return out
+        # `out` may legitimately be None here — a stored None is a hit.
+        return typing.cast(T, out)
 
-    def set(
-        self,
-        key: str,
-        value: T,
-        ex: int | None = None,
-        *args,
-        **kwargs,
-    ) -> None:
+    def set(self, key: str, value: T, ex: int | None = None) -> None:
         """Serializes and stores value in cache with optional TTL.
 
         Args:
             key: Cache key
             value: Value to cache
             ex: TTL in seconds (uses default_ttl if None)
+
+        An effective TTL of 0 drops the write. It does not delete an existing
+        entry — the caller asked for this value not to be cached, not for the
+        key to be evicted.
         """
         _key = self.get_cache_key(key, with_prefix=True)
 
@@ -159,13 +159,23 @@ class Cachetic(CacheticBase[T]):
             logger.debug(f"[SET] cache(ex={ttl}): {_key!r}")
         self.cache.set(_key, _value_bytes, self._ttl_to_expiry(ttl))
 
-    def delete(self, key: str, *args, **kwargs) -> None:
-        """Deletes a key-value pair from the cache."""
+    def delete(self, key: str) -> None:
+        """Deletes a key-value pair from the cache.
+
+        Runs even on a disabled client: removing a value must not depend on
+        whether this client would have written it.
+        """
         _key = self.get_cache_key(key, with_prefix=True)
         self.cache.delete(_key)
 
     def exists(self, key: str) -> bool:
-        """Checks if a key exists in the cache backend."""
+        """Checks if a key exists in the cache backend.
+
+        A client with ``default_ttl=0`` is disabled and reports False.
+        """
+        if self.disabled:
+            return False
+
         _key = self.get_cache_key(key, with_prefix=True)
         return self.cache.exists(_key)
 

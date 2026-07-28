@@ -64,9 +64,7 @@ class TestLifecycle:
     async def test_get_missing_returns_none(self, async_cache: AsyncCachetic[Person]):
         assert await async_cache.get(unique_key("missing")) is None
 
-    async def test_exists_missing_returns_false(
-        self, async_cache: AsyncCachetic[Person]
-    ):
+    async def test_exists_missing_returns_false(self, async_cache: AsyncCachetic[Person]):
         assert await async_cache.exists(unique_key("missing")) is False
 
     async def test_set_then_get(self, async_cache: AsyncCachetic[Person]):
@@ -143,16 +141,10 @@ class TestKeyPrefix:
     async def test_prefix_is_applied(self, async_cache: AsyncCachetic[Person]):
         assert async_cache.get_cache_key("key") == "asynctest:key"
 
-    async def test_prefix_isolates_instances(
-        self, backend_url: str | pathlib.Path
-    ) -> None:
+    async def test_prefix_isolates_instances(self, backend_url: str | pathlib.Path) -> None:
         key = unique_key("shared-name")
-        first = AsyncCachetic[Person](
-            object_type=PERSON_ADAPTER, cache_url=backend_url, prefix="tenant-a"
-        )
-        second = AsyncCachetic[Person](
-            object_type=PERSON_ADAPTER, cache_url=backend_url, prefix="tenant-b"
-        )
+        first = AsyncCachetic[Person](object_type=PERSON_ADAPTER, cache_url=backend_url, prefix="tenant-a")
+        second = AsyncCachetic[Person](object_type=PERSON_ADAPTER, cache_url=backend_url, prefix="tenant-b")
         try:
             await first.set(key, ALICE)
 
@@ -170,17 +162,13 @@ class TestCrossClientInterop:
     that adding the async client did not fork the storage format.
     """
 
-    async def test_async_write_sync_read(
-        self, async_cache: AsyncCachetic[Person], backend_url: str | pathlib.Path
-    ):
+    async def test_async_write_sync_read(self, async_cache: AsyncCachetic[Person], backend_url: str | pathlib.Path):
         key = unique_key("a2s")
         await async_cache.set(key, ALICE)
 
         assert sync_cache_for(backend_url).get(key) == ALICE
 
-    async def test_sync_write_async_read(
-        self, async_cache: AsyncCachetic[Person], backend_url: str | pathlib.Path
-    ):
+    async def test_sync_write_async_read(self, async_cache: AsyncCachetic[Person], backend_url: str | pathlib.Path):
         key = unique_key("s2a")
         sync_cache_for(backend_url).set(key, BOB)
 
@@ -224,9 +212,7 @@ class TestCompression:
             await cache.delete(key)
             await close_all()
 
-    async def test_compressed_write_read_by_uncompressed_client(
-        self, backend_url: str | pathlib.Path
-    ):
+    async def test_compressed_write_read_by_uncompressed_client(self, backend_url: str | pathlib.Path):
         """Readers auto-detect compression regardless of their own setting."""
         key = unique_key("mixed")
         writer = AsyncCachetic[Person](

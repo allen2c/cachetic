@@ -18,8 +18,7 @@ instead of raising.
 """
 
 CREATE_TABLE = sql.SQL(
-    'CREATE TABLE IF NOT EXISTS {} ("name" TEXT NOT NULL PRIMARY KEY, '
-    '"value" TEXT NOT NULL, "expires_at" BIGINT)'
+    'CREATE TABLE IF NOT EXISTS {} ("name" TEXT NOT NULL PRIMARY KEY, ' '"value" TEXT NOT NULL, "expires_at" BIGINT)'
 )
 
 UPSERT = sql.SQL(

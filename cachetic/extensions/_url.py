@@ -39,6 +39,88 @@ which would serialise every query through a single connection.
 """
 
 
+def parse_mongo_url(cache_url: str) -> "MongoUrlParts":
+    """Splits a MongoDB cache URL into connection URL, database and collection.
+
+    Raises:
+        ValueError: if the URL is empty, not a mongo URL, or is missing the
+            database path or the ``collection`` query parameter.
+    """
+    stripped: str | None = cache_url.strip() or None
+    if stripped is None:
+        raise ValueError(f"Invalid mongo url: {cache_url}")
+    cache_url = stripped
+
+    parsed: urllib.parse.ParseResult = urllib.parse.urlparse(cache_url)
+    safe_url: str = hide_url_password(cache_url)
+
+    logger.debug(f"Parsing mongo URL: {safe_url}")
+
+    if not parsed.scheme.startswith("mongo"):
+        raise ValueError(f"Invalid mongo url: {safe_url}")
+
+    database: str | None = parsed.path.strip("/") or None
+    removed, db_url = _strip_query_params(parsed, "collection")
+    collection: str | None = _single(removed["collection"], name="collection", safe_url=safe_url)
+
+    if database is None:
+        raise ValueError(f"Invalid mongo url: {safe_url}, must provide database name in path")
+    if collection is None:
+        raise ValueError(f"Invalid mongo url: {safe_url}, must provide 'collection' name in query")
+
+    return MongoUrlParts(db_url=db_url, database=database, collection=collection)
+
+
+def parse_postgres_url(cache_url: str) -> "PostgresUrlParts":
+    """Splits a PostgreSQL cache URL into connection details, table and pool size.
+
+    ``?pool_min_size=`` and ``?pool_max_size=`` size the connection pool both
+    backends open. They are Cachetic's own parameters and are stripped before
+    the URL reaches psycopg.
+
+    Raises:
+        ValueError: if the URL is not a postgres URL, is missing the database
+            name in its path, or gives a pool size that is not a positive
+            integer with ``min <= max``.
+    """
+    parsed: urllib.parse.ParseResult = urllib.parse.urlparse(cache_url)
+    safe_url: str = hide_url_password(cache_url)
+
+    if not parsed.scheme.startswith("postgres"):
+        raise ValueError(f"Invalid postgres URL: {safe_url}")
+
+    database: str = parsed.path.strip("/")
+    if not database:
+        raise ValueError(f"Invalid postgres URL: {safe_url}, must provide database name in path")
+
+    removed, db_url = _strip_query_params(parsed, "table", "pool_min_size", "pool_max_size")
+
+    table: str = _single(removed["table"], name="table", safe_url=safe_url) or DEFAULT_POSTGRES_TABLE
+    min_size: int = _positive_int(
+        _single(removed["pool_min_size"], name="pool_min_size", safe_url=safe_url),
+        default=DEFAULT_POOL_MIN_SIZE,
+        name="pool_min_size",
+        safe_url=safe_url,
+    )
+    max_size: int = _positive_int(
+        _single(removed["pool_max_size"], name="pool_max_size", safe_url=safe_url),
+        default=max(DEFAULT_POOL_MAX_SIZE, min_size),
+        name="pool_max_size",
+        safe_url=safe_url,
+    )
+    if max_size < min_size:
+        raise ValueError(
+            f"Invalid postgres URL: {safe_url}, pool_max_size ({max_size}) is below pool_min_size ({min_size})"
+        )
+
+    return PostgresUrlParts(
+        db_url=db_url,
+        table=table,
+        pool_min_size=min_size,
+        pool_max_size=max_size,
+    )
+
+
 class MongoUrlParts(typing.NamedTuple):
     """A MongoDB cache URL split into its connection and routing pieces."""
 
@@ -62,22 +144,16 @@ class PostgresUrlParts(typing.NamedTuple):
     pool_max_size: int
 
 
-def _strip_query_params(
-    parsed: urllib.parse.ParseResult, *names: str
-) -> tuple[dict[str, list[str]], str]:
+def _strip_query_params(parsed: urllib.parse.ParseResult, *names: str) -> tuple[dict[str, list[str]], str]:
     """Removes ``names`` from the query string.
 
     Returns the removed values by name and the URL rebuilt without them. Blank
     values are kept: ``?option=`` is meaningful to some drivers, and dropping it
     would silently change the connection.
     """
-    query_params: dict[str, list[str]] = urllib.parse.parse_qs(
-        parsed.query, keep_blank_values=True
-    )
+    query_params: dict[str, list[str]] = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
     removed: dict[str, list[str]] = {name: query_params.pop(name, []) for name in names}
-    cleaned: urllib.parse.ParseResult = parsed._replace(
-        query=urllib.parse.urlencode(query_params, doseq=True)
-    )
+    cleaned: urllib.parse.ParseResult = parsed._replace(query=urllib.parse.urlencode(query_params, doseq=True))
     return removed, urllib.parse.urlunparse(cleaned)
 
 
@@ -86,10 +162,7 @@ def _single(values: list[str], *, name: str, safe_url: str) -> str | None:
     if not values:
         return None
     if len(values) >= 2:
-        logger.warning(
-            f"Got multiple '{name}' values in url: {safe_url}, "
-            + "only the first one will be used"
-        )
+        logger.warning(f"Got multiple '{name}' values in url: {safe_url}, only the first one will be used")
     return values[0]
 
 
@@ -102,105 +175,5 @@ def _positive_int(value: str | None, *, default: int, name: str, safe_url: str) 
     except ValueError:
         parsed = 0
     if parsed < 1:
-        raise ValueError(
-            f"Invalid postgres URL: {safe_url}, "
-            f"'{name}' must be a positive integer, got {value!r}"
-        )
+        raise ValueError(f"Invalid postgres URL: {safe_url}, '{name}' must be a positive integer, got {value!r}")
     return parsed
-
-
-def parse_mongo_url(cache_url: str) -> MongoUrlParts:
-    """Splits a MongoDB cache URL into connection URL, database and collection.
-
-    Raises:
-        ValueError: if the URL is empty, not a mongo URL, or is missing the
-            database path or the ``collection`` query parameter.
-    """
-    stripped: str | None = cache_url.strip() or None
-    if stripped is None:
-        raise ValueError(f"Invalid mongo url: {cache_url}")
-    cache_url = stripped
-
-    parsed: urllib.parse.ParseResult = urllib.parse.urlparse(cache_url)
-    safe_url: str = hide_url_password(cache_url)
-
-    logger.debug(f"Parsing mongo URL: {safe_url}")
-
-    if not parsed.scheme.startswith("mongo"):
-        raise ValueError(f"Invalid mongo url: {safe_url}")
-
-    database: str | None = parsed.path.strip("/") or None
-    removed, db_url = _strip_query_params(parsed, "collection")
-    collection: str | None = _single(
-        removed["collection"], name="collection", safe_url=safe_url
-    )
-
-    if database is None:
-        raise ValueError(
-            f"Invalid mongo url: {safe_url}, must provide database name in path"
-        )
-    if collection is None:
-        raise ValueError(
-            f"Invalid mongo url: {safe_url}, "
-            + "must provide 'collection' name in query"
-        )
-
-    return MongoUrlParts(db_url=db_url, database=database, collection=collection)
-
-
-def parse_postgres_url(cache_url: str) -> PostgresUrlParts:
-    """Splits a PostgreSQL cache URL into connection details, table and pool size.
-
-    ``?pool_min_size=`` and ``?pool_max_size=`` size the connection pool both
-    backends open. They are Cachetic's own parameters and are stripped before
-    the URL reaches psycopg.
-
-    Raises:
-        ValueError: if the URL is not a postgres URL, is missing the database
-            name in its path, or gives a pool size that is not a positive
-            integer with ``min <= max``.
-    """
-    parsed: urllib.parse.ParseResult = urllib.parse.urlparse(cache_url)
-    safe_url: str = hide_url_password(cache_url)
-
-    if not parsed.scheme.startswith("postgres"):
-        raise ValueError(f"Invalid postgres URL: {safe_url}")
-
-    database: str = parsed.path.strip("/")
-    if not database:
-        raise ValueError(
-            f"Invalid postgres URL: {safe_url}, must provide database name in path"
-        )
-
-    removed, db_url = _strip_query_params(
-        parsed, "table", "pool_min_size", "pool_max_size"
-    )
-
-    table: str = (
-        _single(removed["table"], name="table", safe_url=safe_url)
-        or DEFAULT_POSTGRES_TABLE
-    )
-    min_size: int = _positive_int(
-        _single(removed["pool_min_size"], name="pool_min_size", safe_url=safe_url),
-        default=DEFAULT_POOL_MIN_SIZE,
-        name="pool_min_size",
-        safe_url=safe_url,
-    )
-    max_size: int = _positive_int(
-        _single(removed["pool_max_size"], name="pool_max_size", safe_url=safe_url),
-        default=max(DEFAULT_POOL_MAX_SIZE, min_size),
-        name="pool_max_size",
-        safe_url=safe_url,
-    )
-    if max_size < min_size:
-        raise ValueError(
-            f"Invalid postgres URL: {safe_url}, "
-            f"pool_max_size ({max_size}) is below pool_min_size ({min_size})"
-        )
-
-    return PostgresUrlParts(
-        db_url=db_url,
-        table=table,
-        pool_min_size=min_size,
-        pool_max_size=max_size,
-    )

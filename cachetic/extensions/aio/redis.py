@@ -17,10 +17,6 @@ logger = logging.getLogger(__name__)
 _NAMESPACE = "redis"
 
 
-async def _close(client: redis.asyncio.Redis) -> None:  # type: ignore[type-arg]
-    await client.aclose()
-
-
 class AsyncRedisCacheAdapter(AsyncCacheProtocol):
     """Adapts ``redis.asyncio.Redis`` to the ``AsyncCacheProtocol`` interface."""
 
@@ -49,3 +45,7 @@ class AsyncRedisCacheAdapter(AsyncCacheProtocol):
 
     async def exists(self, key: str, /) -> bool:
         return await self._client.exists(key) > 0
+
+
+async def _close(client: redis.asyncio.Redis) -> None:  # type: ignore[type-arg]
+    await client.aclose()

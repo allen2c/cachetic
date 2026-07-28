@@ -18,10 +18,6 @@ logger = logging.getLogger(__name__)
 _NAMESPACE = "redis"
 
 
-def _close(client: "redis.Redis") -> None:  # type: ignore[type-arg]
-    client.close()
-
-
 class RedisCacheAdapter(CacheProtocol):
     """Adapts ``redis.Redis`` to the ``CacheProtocol`` interface.
 
@@ -53,3 +49,7 @@ class RedisCacheAdapter(CacheProtocol):
 
     def exists(self, key: str, /) -> bool:
         return self._client.exists(key) > 0
+
+
+def _close(client: "redis.Redis") -> None:  # type: ignore[type-arg]
+    client.close()

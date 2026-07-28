@@ -40,6 +40,19 @@ Backends live in `cachetic/extensions/` (sync) and `cachetic/extensions/aio/`
        the driver untouched, which is what keeps options like `sslmode` in effect
        for both clients. Pinned by `tests/test_url.py` and by
        `test_libpq_options_reach_both_backends`.
+    5. **A connection URL never reaches a log line unmasked.** Registry keys are
+       the raw URL — they have to be — and for Redis, MongoDB and PostgreSQL that
+       carries the password. Every `logger` call in both registries passes it
+       through `hide_url_password` first, and that function never raises and
+       never echoes back a URL it could not redact. Pinned by
+       `test_registry_never_logs_a_password` and
+       `tests/utils/test_hide_url_password.py`.
+    6. **A missing key and a stored `None` are different things.** `get` returns
+       its `default` only for a real backend miss; a cache whose `T` includes
+       `None` can store `None`, and reading it back is a hit. The distinction
+       travels on the `MISSING` sentinel in `_base.py`, which is what stops
+       `get_or_raise` raising on a key `exists` reports. Pinned by
+       `tests/test_client_semantics.py`.
 
 ## Value format
 
@@ -113,6 +126,14 @@ two different jobs:
 from another loop cannot be awaited from here. There is no reference counting, so
 calling it while a request is in flight surfaces a raw driver error.
 
+Disk is the one exception, and it is deliberate. `diskcache` has no async API and
+its handles are not loop-bound, so the async disk adapter shares the *synchronous*
+registry's entries and there is no per-loop entry for `close_all` to find. The
+async teardown therefore also closes the `DISK_NAMESPACE` entries; without that,
+an application that only ever awaits `cachetic.aio.close_all()` would never
+release a single SQLite handle. Pinned by
+`test_close_all_releases_disk_handles`.
+
 **Sweeping a dead loop cannot close its client.** Every close these drivers
 offer — `Redis.aclose`, `AsyncMongoClient.close`, `AsyncConnectionPool.close` —
 is a coroutine, and there is no live loop to run it on. The sweep drops the
@@ -153,3 +174,21 @@ These are decisions, not bugs. Change them only deliberately.
   `min_size`", which would serialise every query.
 - **`ensured` state lives on the registry entry**, not in a module-level set, so
   a fresh client re-creates its index or table and a shared one does not.
+- **zstd contexts are per thread, not per process.** `zstandard`'s one-shot
+  `compress`/`decompress` reuse an internal C context, so one shared instance
+  segfaults the interpreter under concurrent use — and Cachetic clients are
+  designed to be shared. `_ZSTD_LOCAL` in `cachetic/utils/compression.py` keeps
+  the "build it once" saving without the sharing, at the cost of one context per
+  thread. Pinned by `test_zstd_is_safe_from_many_threads`, which runs in a
+  subprocess because the failure it guards against is a SIGSEGV.
+- **Losing the `CREATE TABLE` race is not an error.** The entry lock serialises
+  table creation within a process, but the registry is process-local and
+  `IF NOT EXISTS` is not atomic across sessions. Both PostgreSQL backends catch
+  `DuplicateTable` / `UniqueViolation` around the DDL and treat the table as
+  ensured — a fleet starting at once against an empty database would otherwise
+  have one instance fail to start. Caught outside the connection block so the
+  rollback runs first.
+- **`default_ttl=0` disables the client, it does not evict.** Reads miss, writes
+  are dropped, and `exists` reports False, so caching can be switched off from
+  configuration alone. Values another client wrote stay where they are. A
+  per-call `ex=0` is narrower still: it skips that one write.

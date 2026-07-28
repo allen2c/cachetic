@@ -13,9 +13,7 @@ import pytest
 # suite can run against non-default ports or a remote host without code changes.
 _DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 _DEFAULT_MONGO_URL = "mongodb://localhost:27017/cachetic?collection=test"
-_DEFAULT_POSTGRES_URL = (
-    "postgresql://postgres:postgres@localhost:5432/cachetic?table=test_cache"
-)
+_DEFAULT_POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/cachetic?table=test_cache"
 
 _DEFAULT_PORTS: dict[str, int] = {
     "redis": 6379,
@@ -49,10 +47,7 @@ def require_service(url: str, *, label: str) -> str:
     port: int = parsed.port or _DEFAULT_PORTS.get(parsed.scheme, 0)
 
     if not is_service_available(host, port):
-        pytest.skip(
-            f"{label} not reachable at {host}:{port} — "
-            "start it with `docker compose up -d`"
-        )
+        pytest.skip(f"{label} not reachable at {host}:{port} — " "start it with `docker compose up -d`")
     return url
 
 
@@ -101,9 +96,7 @@ def postgres_connection_string() -> str:
 
 
 @pytest.fixture(params=["disk", "redis", "mongodb", "postgres"])
-def backend_url(
-    request: pytest.FixtureRequest, tmp_path: pathlib.Path
-) -> str | pathlib.Path:
+def backend_url(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> str | pathlib.Path:
     """A cache URL for each supported backend, one test run per backend.
 
     Lets a single set of assertions cover every backend, and to be reused
