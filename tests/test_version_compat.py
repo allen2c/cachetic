@@ -11,7 +11,9 @@ import pydantic
 import pytest
 from durl import DURL
 
-from cachetic import Cachetic
+from cachetic import AsyncCachetic, Cachetic
+from cachetic.aio import close_all
+from cachetic.extensions.compression import DecompressionError
 from cachetic.utils.compression import HAS_ZSTD, compress_auto
 
 
@@ -388,3 +390,149 @@ class TestCrossConfigRead:
         )
         writer.set("cross", PERSON)
         assert reader.get("cross") == PERSON
+
+
+# ===== Unreadable payloads must not fall back to the legacy path =====
+
+
+# Written by a 0.7.0 client that had `zstandard`, pasted in verbatim so that
+# these run in an environment which never had the library. A frame is the only
+# way to reach the read path being pinned: the writer needs zstd, the reader
+# must not have it.
+ZSTD_DURL_BYTES: bytes = b"data:application/octet-stream;compression=zstd;base64,KLUv/SDITQAAEEFBAQBDCmAB"
+ZSTD_DURL_BYTES_VALUE: bytes = b"A" * 200
+ZSTD_DURL_STR: bytes = b"data:application/json;compression=zstd;base64,KLUv/WAuAH0AAEAiaGVsbG8gIgEAI1GLEQ=="
+ZSTD_DURL_STR_VALUE: str = "hello " * 50
+ZSTD_DURL_JSON: bytes = (
+    b"data:application/json;compression=zstd;base64,KLUv/SAZyQAAeyJuYW1lIjoiQWxpY2UiLCJhZ2UiOjMwfQ=="
+)
+
+STR_ADAPTER: pydantic.TypeAdapter[str] = pydantic.TypeAdapter(str)
+
+
+class TestUndecodablePayloadRaises:
+    """A decoded envelope that cannot be read must raise, never fall back.
+
+    ``DecompressionError`` and ``pydantic.ValidationError`` are both
+    ``ValueError`` subclasses, so a fallback keyed on ``ValueError`` cannot tell
+    "this was never the new format" from "this is the new format and I cannot
+    read it". For the two types whose legacy path accepts arbitrary bytes --
+    ``bytes`` always, ``str`` via the pre-0.3.0 bare-string reader -- that
+    difference is the difference between an error and silently wrong data.
+    """
+
+    @pytest.fixture
+    def without_zstd(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Simulates a reader whose image lacks the `cachetic[zstd]` extra."""
+        monkeypatch.setattr("cachetic.utils.compression.HAS_ZSTD", False)
+
+    def test_bytes_cache_raises_rather_than_returning_the_envelope(
+        self,
+        without_zstd: None,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """The silent case: every byte string validates as ``bytes``."""
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", ZSTD_DURL_BYTES)
+        with pytest.raises(DecompressionError):
+            cache.get("k")
+
+    def test_str_cache_raises_rather_than_returning_the_envelope(
+        self,
+        without_zstd: None,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """The same hole, reached through the pre-0.3.0 bare-string reader."""
+        cache: Cachetic[str] = Cachetic[str](
+            object_type=STR_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", ZSTD_DURL_STR)
+        with pytest.raises(DecompressionError):
+            cache.get("k")
+
+    def test_model_cache_still_raises(
+        self,
+        without_zstd: None,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Types whose legacy path also fails were always correct. Keep them so."""
+        cache: Cachetic[Person] = Cachetic[Person](
+            object_type=PERSON_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", ZSTD_DURL_JSON)
+        with pytest.raises(DecompressionError):
+            cache.get("k")
+
+    @pytest.mark.skipif(not HAS_ZSTD, reason="zstandard not installed")
+    def test_the_same_values_read_when_zstd_is_available(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """The payloads above are real, so the tests above pin a reader gap."""
+        raw: Cachetic[bytes] = Cachetic[bytes](object_type=BYTES_ADAPTER, cache_url=temp_cache_url)
+        raw.cache.set("b", ZSTD_DURL_BYTES)
+        assert raw.get("b") == ZSTD_DURL_BYTES_VALUE
+
+        text: Cachetic[str] = Cachetic[str](object_type=STR_ADAPTER, cache_url=temp_cache_url)
+        text.cache.set("s", ZSTD_DURL_STR)
+        assert text.get("s") == ZSTD_DURL_STR_VALUE
+
+    def test_str_cache_raises_on_a_decoded_payload_that_is_not_json(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Validation failure past the envelope is reported, not retried.
+
+        Falling back would run the bare-string reader over the whole Data URL
+        and return it as the value. The only writer of such a thing is v0.2.0
+        storing a string that is itself shaped like one of Cachetic's own
+        envelopes, with a payload that is valid base64 and invalid JSON -- a
+        case :meth:`_loads_bare_str` already documents as unrecoverable.
+        """
+        cache: Cachetic[str] = Cachetic[str](
+            object_type=STR_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", b"data:application/json;base64,bm90IGpzb24=")  # b"not json"
+        with pytest.raises(pydantic.ValidationError):
+            cache.get("k")
+
+    def test_an_undecodable_envelope_still_falls_back(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """The narrowing must not reach the case the fallback exists for."""
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        stored: bytes = b"data:application/octet-stream;compression=zstd;base64,!!not base64!!"
+        cache.cache.set("k", stored)
+        assert cache.get("k") == stored
+
+    async def test_the_async_client_raises_too(
+        self,
+        without_zstd: None,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Both clients share one read path, and the fix has to reach both."""
+        planter: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        planter.cache.set("k", ZSTD_DURL_BYTES)
+
+        cache: AsyncCachetic[bytes] = AsyncCachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        try:
+            with pytest.raises(DecompressionError):
+                await cache.get("k")
+        finally:
+            await close_all()
