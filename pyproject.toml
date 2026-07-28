@@ -12,10 +12,15 @@ license = { text = "MIT" }
 name = "cachetic"
 readme = "README.md"
 requires-python = ">=3.11,<4"
-version = "0.6.0"
+version = "0.6.1"
 
 [project.optional-dependencies]
 mongodb = ["pymongo (>=4)"]
+# Only needed to read what a v0.7.0 writer that has `cachetic[zstd]` produced.
+# This release never compresses with zstd itself -- it writes zlib, which is in
+# the standard library -- but a value it reads back may carry a zstd frame, and
+# without this the read raises rather than returning wrong bytes.
+zstd = ["zstandard"]
 
 [tool.poetry.group.dev.dependencies]
 black = "*"

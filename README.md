@@ -21,6 +21,37 @@ A simple, type-safe caching library supporting Redis and disk storage with autom
 pip install cachetic
 ```
 
+## Upgrading to v0.7.0 — read this first
+
+v0.7.0 changes the stored value format, and **v0.6.0 cannot read what a v0.7.0
+process writes**. On a shared cache that matters during any rolling deployment:
+while both versions are live, every value a v0.7.0 pod writes is unreadable to
+the v0.6.0 pods beside it — an exception for most types, and silently wrong
+bytes for a `Cachetic[bytes]`. With the default `default_ttl=-1` those values do
+not expire, so rolling back does not clear them.
+
+**v0.6.1 exists only to make that upgrade safe.** It reads the v0.7.0 format and
+still writes the old one, so it is compatible in both directions:
+
+```bash
+pip install "cachetic>=0.6.1,<0.7"   # step 1: deploy everywhere
+pip install "cachetic>=0.7"          # step 2: only once step 1 is fully rolled out
+```
+
+Each step is safe to have half-deployed, and safe to roll back. Skipping step 1
+is what breaks.
+
+Two notes if you use `compression=True`:
+
+- Install the same compression support on both sides. A v0.7.0 process with
+  `cachetic[zstd]` writes zstd frames; a reader without the library raises
+  `DecompressionError` rather than guessing. Either install `cachetic[zstd]`
+  everywhere — it is available on 0.6.1 for exactly this reason — or nowhere.
+- v0.6.1 always compresses with zlib, where v0.6.0 used zstd whenever
+  `zstandard` happened to be importable. This is deliberate: it keeps 0.6.1's
+  writes readable by the 0.6.0 pods it is rolling over, whatever either image
+  has installed. v0.6.0 and v0.7.0 both read zlib.
+
 ## Quick Start
 
 ### Basic Usage
