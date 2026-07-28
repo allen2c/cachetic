@@ -2,6 +2,10 @@
 
 How Cachetic is put together, and the invariants that must not be broken.
 
+The rules themselves live in [Principles](PRINCIPLES.md) and do not change when
+the code does. This page is the other half: what the code currently looks like,
+and which test pins each part of it.
+
 ## Layers
 
 ```
@@ -23,11 +27,12 @@ Backends live in `cachetic/extensions/` (sync) and `cachetic/extensions/aio/`
     1. **One value format.** `Cachetic` and `AsyncCachetic` must produce
        byte-identical payloads. Pinned by
        `TestCrossClientInterop::test_identical_serialised_bytes`.
-    2. **Old data stays readable.** `_loads_any` dispatches on three formats —
-       Data URL (v0.7.0+), compressed legacy (v0.5.0+), raw bytes (v0.1.0+).
-       Detection must stay narrow: a `bytes` cache stores its payload verbatim,
-       so pre-0.7.0 data can itself begin with `data:`. Pinned by
-       `tests/test_version_compat.py`.
+    2. **Three storage formats, one reader.** [Principle 1](PRINCIPLES.md)
+       requires every version to read what earlier ones wrote; the mechanism is
+       `_loads_any`, which dispatches on Data URL (v0.7.0+), compressed legacy
+       (v0.5.0+), and raw bytes (v0.1.0+). Detection must stay narrow: a `bytes`
+       cache stores its payload verbatim, so pre-0.7.0 data can itself begin
+       with `data:`. Pinned by `tests/test_version_compat.py`.
     3. **Sync and async PostgreSQL create the same table.** Both use
        `CREATE TABLE IF NOT EXISTS`, so a mismatch diverges silently rather than
        raising. The schema lives once, in
@@ -188,7 +193,7 @@ These are decisions, not bugs. Change them only deliberately.
   ensured — a fleet starting at once against an empty database would otherwise
   have one instance fail to start. Caught outside the connection block so the
   rollback runs first.
-- **`default_ttl=0` disables the client, it does not evict.** Reads miss, writes
-  are dropped, and `exists` reports False, so caching can be switched off from
-  configuration alone. Values another client wrote stay where they are. A
-  per-call `ex=0` is narrower still: it skips that one write.
+- **`default_ttl=0` disables the client, it does not evict.** The semantics are
+  fixed by [Principle 3](PRINCIPLES.md); here it is enough to know that
+  `disabled` keys off `default_ttl` alone, so `set(key, value, ex=60)` on a
+  disabled client still writes a value that same client's `get` will not return.

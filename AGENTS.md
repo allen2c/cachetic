@@ -3,18 +3,21 @@
 Type-safe caching library. `Cachetic` and `AsyncCachetic` over four backends:
 disk, Redis, MongoDB, PostgreSQL.
 
+## Read this first
+
+[`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) is the constitution — five rules every
+release obeys. A task that cannot be done without breaking one is the thing that
+is wrong. Amend the rule there first, in its own change, or drop the task.
+
 ## Where to look
 
 | Question | Go to |
 |----------|-------|
+| What may a change never do? | [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) |
 | What does the public API do? | [`README.md`](README.md) |
 | How is this put together? What must not break? | [`docs/architecture.md`](docs/architecture.md) |
-| How do I run tests, services, lint, docs? What are the code conventions? | [`docs/contributing.md`](docs/contributing.md) |
+| How do I run tests, services, lint, docs? What are the conventions? | [`docs/contributing.md`](docs/contributing.md) |
 | What is still open? | `HANDOFF.md` — untracked, may not exist in a fresh clone |
-
-Read `docs/architecture.md` before touching `_base.py`, `extensions/_url.py`,
-either registry, or either PostgreSQL backend. Its **Invariants** section lists
-what fails silently and which test pins it.
 
 ## Three things that bite
 

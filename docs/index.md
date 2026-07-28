@@ -6,6 +6,9 @@
 
 Type-safe caching for Python — multiple backends, Pydantic serialization, zero boilerplate.
 
+Every release obeys [five principles](PRINCIPLES.md), the first of which is that
+data and calls from earlier versions keep working.
+
 ## Features
 
 - **4 backends** — disk ([diskcache](https://github.com/grantjenks/python-diskcache)), Redis, MongoDB, PostgreSQL

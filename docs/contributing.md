@@ -131,9 +131,10 @@ private definitions. It is import machinery, not part of the public surface.
 
 ## Before changing behaviour
 
-Read the invariants in [Architecture](architecture.md). Every one of them is the
-kind that fails silently rather than loudly, which is why each names the test
-that pins it.
+Read [Principles](PRINCIPLES.md) — five rules, and a change that breaks one does
+not ship. Then read the invariants in [Architecture](architecture.md): every one
+of them is the kind that fails silently rather than loudly, which is why each
+names the test that pins it.
 
 ## Proving a fix
 

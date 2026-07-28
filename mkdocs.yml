@@ -53,6 +53,7 @@ plugins:
 
 nav:
   - Home: index.md
+  - Principles: PRINCIPLES.md
   - Architecture: architecture.md
   - Contributing: contributing.md
 
