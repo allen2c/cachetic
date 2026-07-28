@@ -6,7 +6,7 @@
 
 Type-safe caching for Python — multiple backends, Pydantic serialization, zero boilerplate.
 
-Every release obeys [five principles](docs/PRINCIPLES.md), the first of which is
+Every release obeys [six principles](docs/PRINCIPLES.md), the first of which is
 that data and calls from earlier versions keep working.
 
 ## Features
@@ -80,6 +80,30 @@ asyncio.run(main())
 Both clients read each other's data on every backend, so you can migrate one call
 site at a time, or run a sync worker alongside an async web app against the same
 cache.
+
+### Connection lifecycle
+
+What a `Cachetic` costs, in order:
+
+| Moment | Connections |
+|--------|-------------|
+| `Cachetic(...)` | none — construct your caches at import time, including ones you never use |
+| `cache.cache` | none — the adapter holds a handle, not a client |
+| First `get` / `set` / `delete` / `exists` | one client for that URL |
+| Another `Cachetic` on the same URL | still one — clients are shared per URL, whatever the cached type |
+| `close_all()` | none |
+
+Nothing is cached in your process: every read goes to the backend, so a value
+another client deleted is gone here too. Whatever pools and monitor threads the
+driver keeps are the driver's, and you pay for them once per URL rather than once
+per `Cachetic`.
+
+The PostgreSQL pool keeps **one** connection warm, not psycopg's default of four,
+because a cache is optional infrastructure and four becomes thirty-two across
+eight workers. Raise it with `?pool_min_size=`.
+
+This is [Principle 6](docs/PRINCIPLES.md), and it is what makes one cache per
+cached model the intended shape rather than an expensive habit.
 
 ### Closing connections
 
@@ -176,6 +200,31 @@ the cache is on a hot path.
 > All four backends share connections automatically — multiple `Cachetic` instances with
 > the same URL reuse a single underlying client and skip redundant DDL / index creation.
 > Release them with `cachetic.close_all()`.
+
+### Bringing your own client
+
+`cache_url` also takes a client you built yourself, when you want your own
+connection settings rather than a URL:
+
+```python
+import diskcache
+
+cache = Cachetic[Person](
+    object_type=pydantic.TypeAdapter(Person),
+    cache_url=diskcache.Cache(".cache-i-opened-myself"),
+)
+```
+
+`redis.Redis` works the same way, and `AsyncCachetic` takes a `redis.asyncio.Redis`.
+
+**Cachetic does not close what you opened.** A client passed in this way is used
+as-is, never entered into the shared connection registry, and left open by
+`close_all()` — closing a pool the library did not open would break it for
+whatever else is holding it. Closing it is yours to do.
+
+MongoDB and PostgreSQL are configured by URL only. Their backends also need the
+collection or table name, which arrives as `?collection=` / `?table=` — a bare
+`MongoClient` does not carry it, so there is nothing to route it to.
 
 ## Compression
 
@@ -332,21 +381,30 @@ mongo_cache.set("key", b"...")
 writer that has the library prefers zstd, and a reader without it cannot
 decompress the result.
 
-**4. `get`, `set`, `delete` and `get_or_raise` no longer accept `*args, **kwargs`.**
-They took them and silently ignored them, so `cache.get("key", "fallback")` — the
-`dict.get` habit — threw the fallback away and returned `None`. `get` now has a
-real `default` parameter; the other three take exactly their documented arguments,
-and anything else is a `TypeError`.
+**4. `get` has a real `default` parameter.** `get`, `set`, `delete` and
+`get_or_raise` used to take `*args, **kwargs` and silently ignore them, so
+`cache.get("key", "fallback")` — the `dict.get` habit — threw the fallback away
+and returned `None`. The second argument to `get` now means what it reads as.
 
 ```python
 cache.get("missing", "fallback")   # "fallback" — used to be None
 ```
 
+Anything *beyond* that is still accepted and still ignored, now with a
+`DeprecationWarning` naming what was dropped. Old calls keep working; they just
+stop being silent.
+
+```text
+cache.delete("key", conn)          # runs, warns, ignores conn
+```
+
+`exists` is new in v0.7.0 and takes exactly its documented arguments.
+
 **5. `default_ttl=0` now disables reads as well as writes.** It was documented as
 "disable cache" but only dropped writes, so a client configured to turn caching
-off kept serving whatever an earlier client had written. Reads now miss and
-`exists` reports `False`. A per-call `ex=0` is unchanged: it skips that one write
-and leaves any existing entry alone.
+off kept serving whatever an earlier client had written. Reads now miss, `exists`
+reports `False`, and writes are dropped whatever `ex` the call carries. A per-call
+`ex=0` is unchanged: it skips that one write and leaves any existing entry alone.
 
 **6. `get_or_raise` no longer raises on a stored `None`.** For a cache whose type
 includes `None`, a key holding `None` is a hit — it used to be indistinguishable
@@ -357,6 +415,16 @@ directly, so `pip install cachetic[postgres]` no longer pulls in an ORM, the
 whole connection URL reaches psycopg (`sslmode` and friends now work on the sync
 client too), and the pool keeps **one** connection warm instead of four. Raise it
 with `?pool_min_size=`.
+
+**8. `.cache` returns an adapter, not the driver.** It used to hand back the real
+`redis.Redis` / `diskcache.Cache`, so `cache.cache.scan_iter(...)` worked. It now
+returns a four-method `CacheProtocol`, which is what lets every backend answer the
+same call the same way. If you need the driver's own methods, keep your own
+reference and pass it in as `cache_url` — see *Bringing your own client*.
+
+```text
+cache.cache.scan_iter()    # AttributeError since v0.7.0
+```
 
 ### Stored data
 

@@ -57,9 +57,16 @@ pyright --pythonpath "$(poetry env info -p)/bin/python"
 | `test_version_compat.py` | Reading data written by v0.1.0 onwards |
 | `test_url.py` | Connection-URL parsing, shared by the sync and async adapters |
 | `test_postgres_cache.py` | Schema and connection-option parity between the two PostgreSQL backends, pool sizing, lazy expiry |
-| `test_readme_executes.py` | Runs every ```` ```python ```` block in `README.md` |
+| `test_readme_executes.py` | Runs every ```` ```python ```` block in `README.md` **and** `docs/index.md` |
 | `test_readme_usages.py` | Asserts the *outcomes* the README examples describe |
 | `test_client_semantics.py` | `get`'s `default`, stored `None` vs a miss, and the disabled client |
+| `test_v060_api_floor.py` | Principle 1 — every call v0.6.0 accepted is still accepted |
+| `test_supplied_client.py` | Principle 1 — `cache_url` taking a client the caller owns, and not closing it |
+| `test_backend_parity.py` | Principle 2 — the four adapters answer `set(key, value, ex)` identically |
+| `test_lazy_expiry_race.py` | The conditional expiry delete, on all four paths (sync/async × `get`/`exists`) |
+| `test_key_scheme.py` | Principle 4 — the key read back off the wire is `prefix:key` |
+| `test_optional_imports.py` | Principle 5 — importing Cachetic imports no driver. Runs in a subprocess |
+| `test_resource_discipline.py` | Principle 6 — when connections open, that they are shared, that nothing is memoised |
 | `utils/test_compression.py` | zstd/zlib round-trips, format detection, and thread safety |
 | `utils/test_hide_url_password.py` | Credential redaction — every log line and error message depends on it |
 
@@ -69,11 +76,11 @@ assertions. Prefer it over writing per-backend tests.
 Keys must be unique per test — backends are shared between tests and between
 runs. `test_async_cache.py` has a `unique_key()` helper.
 
-!!! danger "Every ```python block in README.md is executed"
-    `test_readme_executes.py` extracts them and runs them in order into one
-    shared namespace, in a temporary working directory — so a snippet may build
-    on names an earlier one introduced, but may not depend on anything the
-    README never shows. A snippet that cannot run is a failing test.
+!!! danger "Every ```python block in README.md and docs/index.md is executed"
+    `test_readme_executes.py` extracts them from both pages and runs each page in
+    order into its own namespace, in a temporary working directory — so a snippet
+    may build on names an earlier one introduced, but may not depend on anything
+    that page never shows. A snippet that cannot run is a failing test.
 
     Blocks that only illustrate something — a before/after diff, a shell
     command — must use a different fence language. Do not add a ```python fence
@@ -131,7 +138,7 @@ private definitions. It is import machinery, not part of the public surface.
 
 ## Before changing behaviour
 
-Read [Principles](PRINCIPLES.md) — five rules, and a change that breaks one does
+Read [Principles](PRINCIPLES.md) — six rules, and a change that breaks one does
 not ship. Then read the invariants in [Architecture](architecture.md): every one
 of them is the kind that fails silently rather than loudly, which is why each
 names the test that pins it.

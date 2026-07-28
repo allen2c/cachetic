@@ -5,7 +5,7 @@ disk, Redis, MongoDB, PostgreSQL.
 
 ## Read this first
 
-[`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) is the constitution — five rules every
+[`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) is the constitution — six rules every
 release obeys. A task that cannot be done without breaking one is the thing that
 is wrong. Amend the rule there first, in its own change, or drop the task.
 
@@ -25,9 +25,8 @@ is wrong. Amend the rule there first, in its own change, or drop the task.
   when the service is down. Run `make services-up` first, or `make test-all`.
 - **The sync and async halves mirror each other on purpose.** A change to one
   belongs in the other.
-- **`README.md` and `docs/index.md` are the same content twice**, and every
-  ```` ```python ```` block in `README.md` is executed as a test. See
-  *Documentation* in `docs/contributing.md` before editing either.
+- **Every ```` ```python ```` block in `README.md` and `docs/index.md` is executed
+  as a test.** The two are the same content in two formats — update both.
 
 ## Before committing
 

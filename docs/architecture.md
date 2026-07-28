@@ -18,6 +18,10 @@ CacheticBase          configuration, key naming, TTL, serialisation — no I/O
 Both clients inherit it, which is what keeps the storage format from forking:
 there is exactly one implementation of `_dump_any` / `_loads_any`.
 
+Below the clients, `cachetic/extensions/_ttl.py` is the same idea one layer
+down — one definition of what `ex` means to a backend, so eight adapters cannot
+each answer it differently.
+
 Backends live in `cachetic/extensions/` (sync) and `cachetic/extensions/aio/`
 (async), each implementing a four-method protocol from `cachetic/types/`.
 
@@ -52,7 +56,22 @@ Backends live in `cachetic/extensions/` (sync) and `cachetic/extensions/aio/`
        never echoes back a URL it could not redact. Pinned by
        `test_registry_never_logs_a_password` and
        `tests/utils/test_hide_url_password.py`.
-    6. **A missing key and a stored `None` are different things.** `get` returns
+    6. **Backends answer the same call the same way.** The TTL a backend is
+       handed means one thing everywhere, defined once in
+       `cachetic/extensions/_ttl.py`: `None` or non-positive stores without a
+       deadline, positive expires. Left to the drivers this went four ways —
+       diskcache stored an already-expired value, redis raised, MongoDB and
+       PostgreSQL stored forever. It matters because `Cachetic.cache` is public.
+       Pinned by `tests/test_backend_parity.py`.
+    7. **The key on the wire is `prefix:key`.** [Principle 4](PRINCIPLES.md)
+       is unenforceable from inside `get_cache_key`, so
+       `tests/test_key_scheme.py` reads the stored key back through the raw
+       driver on each backend, and checks all four operations ask for the
+       prefix.
+    8. **Importing Cachetic imports no driver.** [Principle 5](PRINCIPLES.md),
+       pinned by `tests/test_optional_imports.py`, which has to run in a
+       subprocess: the rest of the suite imports every driver at module scope.
+    9. **A missing key and a stored `None` are different things.** `get` returns
        its `default` only for a real backend miss; a cache whose `T` includes
        `None` can store `None`, and reading it back is a hit. The distinction
        travels on the `MISSING` sentinel in `_base.py`, which is what stops
@@ -73,9 +92,19 @@ which is why the PostgreSQL backend can store it in a `TEXT` column.
 
 ## Connection lifecycle
 
+[Principle 6](PRINCIPLES.md) is the rule this section implements. Measured, for
+every backend: constructing a `Cachetic` opens nothing, reaching for `.cache`
+opens nothing — it only builds an adapter holding an `EntryHandle` — and the
+first actual operation opens exactly one client, which every later instance on
+that URL reuses. `tests/test_resource_discipline.py` pins all of it, including
+that no value is kept in the process between calls.
+
 Backend clients are shared between every instance that names the same URL. An
 application typically builds several `Cachetic` objects — one per cached type —
-and each opening its own connections would waste them for no gain.
+and each opening its own connections would waste them for no gain. For MongoDB
+and PostgreSQL the waste is not only sockets: `pymongo` keeps three monitor
+threads per client and `psycopg_pool` a scheduler and its workers, so twenty
+unshared instances would be sixty threads doing nothing.
 
 There are two registries with a deliberately identical shape:
 
@@ -99,6 +128,14 @@ instead of failing for the rest of the process. Pinned by
 Setup that must happen exactly once per client — `create_index`,
 `CREATE TABLE`, `pool.open()` — is guarded by the entry's own lock and recorded
 in `entry.ensured`, so a fresh client redoes it and a shared one does not.
+
+**A client the caller supplied is not the registry's.** `cache_url` accepts a
+live `redis.Redis` / `diskcache.Cache` — [Principle 1](PRINCIPLES.md) requires
+it, v0.6.0 took one. `CacheticBase.accept_a_live_backend_client` moves it to
+`cache_client` and puts a label where the URL was, because the registry keys on
+the URL and this has none. The adapter holds the object directly instead of an
+`EntryHandle`, so it is never shared, never swept, and never closed by
+`close_all()`. Pinned by `tests/test_supplied_client.py`.
 
 !!! warning "The registry has no upper bound"
     Entries are keyed by URL and only removed by `close_all()` or a dead loop, so
@@ -160,9 +197,10 @@ These are decisions, not bugs. Change them only deliberately.
 - **Expiry is cleaned up lazily, on read.** `get` and `exists` delete the entry
   they found expired. That delete is conditional on the deadline they read — an
   unconditional delete-by-key would drop a value written by a concurrent `set`
-  in between. Pinned by
-  `test_expired_cleanup_does_not_drop_a_concurrent_write` in the Mongo and
-  Postgres suites.
+  in between. Pinned across all four paths — sync and async, `get` and
+  `exists` — by `tests/test_lazy_expiry_race.py`. Postgres shares one `_fetch`
+  between `get` and `exists`; Mongo's `exists` carries its own copy of the
+  compare-and-delete, which is why testing `get` alone was not enough.
 - **Pre-0.7.0 `bytes` values need the writer's `compression` setting.** They
   carry no algorithm marker, and every byte string validates as `bytes`, so
   there is no failure to recover from. Every other value type recovers on its
@@ -194,6 +232,10 @@ These are decisions, not bugs. Change them only deliberately.
   have one instance fail to start. Caught outside the connection block so the
   rollback runs first.
 - **`default_ttl=0` disables the client, it does not evict.** The semantics are
-  fixed by [Principle 3](PRINCIPLES.md); here it is enough to know that
-  `disabled` keys off `default_ttl` alone, so `set(key, value, ex=60)` on a
-  disabled client still writes a value that same client's `get` will not return.
+  fixed by [Principle 3](PRINCIPLES.md). All four operations consult `disabled`
+  before the backend: reads miss, writes are dropped whatever `ex` the call
+  carries, and only `delete` still runs. An earlier version checked it in `get`
+  and `exists` but not `set`, so an explicit `ex` resolved on its own and wrote
+  a value that same client refused to read back. Pinned by
+  `test_sync_disabled_client_drops_a_write_carrying_an_explicit_ex` and its
+  async twin.
