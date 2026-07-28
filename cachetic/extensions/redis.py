@@ -1,7 +1,8 @@
 """Redis adapter for CacheProtocol.
 
-Wraps ``redis.Redis`` to provide a unified cache interface.
-Reuses Redis clients per URL via a module-level registry.
+Wraps ``redis.Redis`` to provide a unified cache interface. Clients are shared
+per URL through :mod:`cachetic.extensions._registry`, and released by
+:func:`cachetic.close_all`.
 """
 
 import logging
@@ -9,11 +10,16 @@ import typing
 
 import redis
 
+from cachetic.extensions import _registry
 from cachetic.types.cache_protocol import CacheProtocol
 
 logger = logging.getLogger(__name__)
 
-_client_registry: dict[str, redis.Redis] = {}  # type: ignore[type-arg]
+_NAMESPACE = "redis"
+
+
+def _close(client: "redis.Redis") -> None:  # type: ignore[type-arg]
+    client.close()
 
 
 class RedisCacheAdapter(CacheProtocol):
@@ -22,16 +28,19 @@ class RedisCacheAdapter(CacheProtocol):
     Clients are shared per URL to avoid redundant connection pools.
     """
 
-    _client: redis.Redis  # type: ignore[type-arg]
+    _entry: _registry.EntryHandle
 
     def __init__(self, url: str) -> None:
-        if url in _client_registry:
-            self._client = _client_registry[url]
-            logger.debug("Reusing existing Redis client for: %s", url)
-        else:
-            self._client = redis.Redis.from_url(url)
-            _client_registry[url] = self._client
-            logger.debug("Created new Redis client for: %s", url)
+        self._entry = _registry.EntryHandle(
+            _NAMESPACE,
+            url,
+            factory=lambda: redis.Redis.from_url(url),
+            close=_close,
+        )
+
+    @property
+    def _client(self) -> "redis.Redis":  # type: ignore[type-arg]
+        return self._entry().client
 
     def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
         self._client.set(key, value, ex=ex)

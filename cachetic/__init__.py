@@ -4,6 +4,10 @@ Supports disk, Redis, MongoDB and PostgreSQL backends behind one interface, in
 both synchronous (:class:`Cachetic`) and asynchronous (:class:`AsyncCachetic`)
 flavours. Both clients share a single value format, so a cache written by one is
 readable by the other.
+
+Backend clients are shared per URL between every instance that uses it. Call
+:func:`close_all` to release them — and :func:`cachetic.aio.close_all` for the
+async ones, which are shared per event loop and have to be closed from theirs.
 """
 
 import functools
@@ -19,6 +23,7 @@ from cachetic._base import (  # noqa: F401  (re-exported for backwards compatibi
     _detect_compression_name,
     _validate_ttl_value,
 )
+from cachetic.extensions._registry import close_all
 
 if typing.TYPE_CHECKING:
     from cachetic.aio import AsyncCachetic
@@ -30,6 +35,7 @@ __all__ = [
     "Cachetic",
     "CacheticBase",
     "__version__",
+    "close_all",
 ]
 
 __version__ = pathlib.Path(__file__).parent.joinpath("VERSION").read_text().strip()
@@ -79,7 +85,7 @@ class Cachetic(CacheticBase[T]):
                 from cachetic.extensions.postgres import PostgresCache
             except ImportError:
                 raise ImportError(
-                    "PostgreSQL support requires 'peewee' and 'psycopg'. "
+                    "PostgreSQL support requires 'psycopg' and 'psycopg-pool'. "
                     "Install with: pip install cachetic[postgres]"
                 ) from None
             return PostgresCache(self.cache_url)

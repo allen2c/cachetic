@@ -14,17 +14,19 @@ requires-python = ">=3.11,<4"
 version = "0.7.0"
 
 [project.optional-dependencies]
-mongodb = ["pymongo (>=4.9)"] # 4.9 introduced AsyncMongoClient
-postgres = ["peewee", "psycopg-pool", "psycopg[binary]"]
+mongodb = ["pymongo (>=4.9)"]                  # 4.9 introduced AsyncMongoClient
+postgres = ["psycopg-pool", "psycopg[binary]"]
 redis = ["redis (>=5)"]
+# Compression falls back to zlib when this is absent. Declare it explicitly:
+# a writer that has zstd installed produces values a reader without it cannot
+# decompress, so the two ends must agree.
+zstd = ["zstandard"]
 
 [tool.poetry.group.dev.dependencies]
 black = "*"
 isort = "*"
 logging-bullet-train = "*"
 mkdocs-material = "*"
-peewee = "*"
-poetry-plugin-export = "*"
 psycopg = { extras = ["binary"], version = "*" }
 psycopg-pool = "*"
 pymongo = "*"

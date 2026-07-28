@@ -33,7 +33,7 @@ async def _close(client: pymongo.AsyncMongoClient) -> None:
 class AsyncMongoCache(AsyncCacheProtocol):
     """A cache that uses MongoDB as a backend, over pymongo's async client."""
 
-    _entry: _registry.Entry
+    _entry: _registry.EntryHandle
 
     def __init__(self, cache_url: str) -> None:
         """Initializes the cache from a MongoDB URL.
@@ -47,7 +47,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
 
         self._database = parts.database
         self._collection = parts.collection
-        self._entry = _registry.acquire(
+        self._entry = _registry.EntryHandle(
             _NAMESPACE,
             parts.db_url,
             factory=lambda: pymongo.AsyncMongoClient(
@@ -56,28 +56,33 @@ class AsyncMongoCache(AsyncCacheProtocol):
             close=_close,
         )
 
-    @property
-    def client(self) -> pymongo.AsyncMongoClient:
-        return self._entry.client
+    async def _ready_col(self):
+        """Returns the collection, creating its unique index once per client."""
+        entry = self._entry()
+        col = entry.client[self._database][self._collection]
 
-    @property
-    def col(self):
-        return self.client[self._database][self._collection]
-
-    async def _ensure_index(self) -> None:
-        """Creates the unique index on ``name``, once per client and collection."""
         index_key = (self._database, self._collection)
-        if index_key in self._entry.ensured:
-            return
+        if index_key in entry.ensured:
+            return col
 
-        async with self._entry.lock:
-            if index_key in self._entry.ensured:
-                return
-            await self.col.create_index("name", unique=True)
-            self._entry.ensured.add(index_key)
+        async with entry.lock:
+            if index_key in entry.ensured:
+                return col
+            await col.create_index("name", unique=True)
+            entry.ensured.add(index_key)
             logger.debug(
                 f"Ensured unique index on 'name' in collection: {self._collection}"
             )
+        return col
+
+    async def _delete_if_expired(self, col, key: str, expires_at: int) -> None:
+        """Removes an expired entry, unless it has since been rewritten.
+
+        The filter pins ``ex`` to the deadline that was just read: a concurrent
+        ``set`` between that read and this delete replaces the entry, and its
+        value must not be dropped by this cleanup.
+        """
+        await col.delete_one({"name": key, "ex": expires_at})
 
     async def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
         """Sets a key-value pair, with an optional expiration in seconds.
@@ -85,7 +90,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
         Deadline granularity matches the sync backend exactly, including its
         up-to-one-second lateness. See ``CacheticBase._ttl_to_expiry``.
         """
-        await self._ensure_index()
+        col = await self._ready_col()
 
         expires_at = None if ex is None or ex < 1 else int(time.time()) + math.ceil(ex)
 
@@ -95,7 +100,7 @@ class AsyncMongoCache(AsyncCacheProtocol):
             f"ex={expires_at}"
         )
 
-        await self.col.update_one(
+        await col.update_one(
             {"name": key}, {"$set": {"value": value, "ex": expires_at}}, upsert=True
         )
 
@@ -104,9 +109,9 @@ class AsyncMongoCache(AsyncCacheProtocol):
 
         Returns None if the key doesn't exist or has expired.
         """
-        await self._ensure_index()
+        col = await self._ready_col()
 
-        doc: DocumentParam | None = await self.col.find_one({"name": key})
+        doc: DocumentParam | None = await col.find_one({"name": key})
         if doc is None:
             logger.debug(f"[AsyncMongoCache.get] Key='{key}' not found.")
             return None
@@ -119,26 +124,26 @@ class AsyncMongoCache(AsyncCacheProtocol):
             logger.debug(
                 f"[AsyncMongoCache.get] Key='{key}' expired at {expires_at}. Deleting."
             )
-            await self.col.delete_one({"name": key})
+            await self._delete_if_expired(col, key, expires_at)
             return None
 
         return doc["value"]
 
     async def delete(self, key: str, /) -> None:
         """Deletes a key-value pair from the cache."""
-        await self._ensure_index()
-        await self.col.delete_one({"name": key})
+        col = await self._ready_col()
+        await col.delete_one({"name": key})
 
     async def exists(self, key: str, /) -> bool:
         """Checks if a key exists and has not expired."""
-        await self._ensure_index()
+        col = await self._ready_col()
 
-        doc: DocumentParam | None = await self.col.find_one({"name": key})
+        doc: DocumentParam | None = await col.find_one({"name": key})
         if doc is None:
             return False
 
         expires_at: int | None = doc["ex"]
         if expires_at is not None and expires_at < int(time.time()):
-            await self.col.delete_one({"name": key})
+            await self._delete_if_expired(col, key, expires_at)
             return False
         return True

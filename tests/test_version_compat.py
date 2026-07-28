@@ -143,6 +143,99 @@ class TestLegacyReadPath:
         cache.cache.set("k", RAW_BYTES)
         assert cache.get("k") == RAW_BYTES
 
+    def test_legacy_compressed_bytes_with_matching_flag(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Compressed raw bytes stored by v0.5.x with compression=True.
+
+        Pre-0.7.0 values carry no algorithm marker, and every byte string is a
+        valid ``bytes``, so there is no validation error to recover from: the
+        reader has to be configured the way the writer was. Values written from
+        0.7.0 on are self-describing and lift this requirement.
+        """
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+            compression=True,
+        )
+        cache.cache.set("k", zlib.compress(RAW_BYTES))
+        assert cache.get("k") == RAW_BYTES
+
+
+class TestLegacyBytesThatLookLikeDataUrls:
+    """Pre-0.7.0 ``bytes`` values may themselves begin with ``data:``.
+
+    A bytes cache stores its payload verbatim, so caching a data URI produces
+    stored data indistinguishable from a format marker unless detection is
+    narrow. These pin that such values stay readable.
+    """
+
+    def test_foreign_mime_is_read_as_legacy(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """A valid data URI Cachetic never emits must come back verbatim."""
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        stored: bytes = b"data:image/png;base64,SEVMTE8="
+        cache.cache.set("k", stored)
+        assert cache.get("k") == stored
+
+    def test_unparseable_data_uri_is_read_as_legacy(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Something that only looks like a data URI must not raise."""
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        stored: bytes = b"data:image/png;base64,not_really_base64!!"
+        cache.cache.set("k", stored)
+        assert cache.get("k") == stored
+
+    def test_own_header_but_corrupt_payload_falls_back(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Cachetic's own header with an unusable payload still reads as legacy."""
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        stored: bytes = b"data:application/octet-stream;base64,!!!not base64!!!"
+        cache.cache.set("k", stored)
+        assert cache.get("k") == stored
+
+    def test_json_cache_ignores_octet_stream_header(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Detection is per value type: a JSON cache must not claim bytes headers."""
+        cache: Cachetic[Person] = Cachetic[Person](
+            object_type=PERSON_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        cache.cache.set("k", b"data:application/octet-stream;base64,SEVMTE8=")
+        with pytest.raises(pydantic.ValidationError):
+            cache.get("k")
+
+    def test_roundtrip_of_a_data_uri_payload(
+        self,
+        temp_cache_url: pathlib.Path,
+    ) -> None:
+        """Writing a data URI through the public API round-trips unchanged."""
+        cache: Cachetic[bytes] = Cachetic[bytes](
+            object_type=BYTES_ADAPTER,
+            cache_url=temp_cache_url,
+        )
+        value: bytes = b"data:application/octet-stream;base64,SEVMTE8="
+        cache.set("k", value)
+        assert cache.get("k") == value
+
 
 # ===== _dump_any output format assertions =====
 

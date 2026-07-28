@@ -1,3 +1,12 @@
+"""Compression helpers shared by the value format.
+
+zstd is preferred when available and zlib is the fallback, which means the
+algorithm a value is written with depends on the writer's environment. Values
+record which one they used, so a reader only needs the matching library — but a
+reader that lacks ``zstandard`` cannot read what a writer with it produced.
+Install the ``cachetic[zstd]`` extra on both ends, or on neither.
+"""
+
 import logging
 import zlib
 from typing import Literal
@@ -6,8 +15,7 @@ from cachetic.extensions.compression import DecompressionError
 
 logger = logging.getLogger(__name__)
 
-# Try to import zstandard (pip install zstandard)
-# This prepares the code for future Python versions or environments with zstd support.
+# Declared by the 'zstd' extra; absent installations transparently use zlib.
 try:
     import zstandard as zstd
 
@@ -99,10 +107,12 @@ def decompress_auto(data: bytes) -> bytes:
     # 1. Zstandard Detection (High Confidence)
     if data.startswith(ZSTD_MAGIC):
         if not HAS_ZSTD:
-            # We identified it's Zstd, but we can't process it.
-            # This is a system configuration error, not a data error.
+            # We identified it's Zstd, but we can't process it. This is a system
+            # configuration error, not a data error: something wrote this value
+            # from an environment that had zstandard installed.
             raise DecompressionError(
-                "Detected Zstd data but 'zstandard' library is not installed."
+                "Detected Zstd data but the 'zstandard' library is not "
+                "installed. Install it with: pip install cachetic[zstd]"
             )
 
         try:

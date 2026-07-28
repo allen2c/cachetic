@@ -1,7 +1,19 @@
 """Postgres adapter for CacheProtocol.
 
-Uses peewee ORM with psycopg (v3) driver.
-Reuses database connections per URL via a module-level registry.
+Talks to psycopg3 through a :class:`psycopg_pool.ConnectionPool`, mirroring the
+async backend in :mod:`cachetic.extensions.aio.postgres`. Both compose their
+statements from :mod:`cachetic.extensions._postgres_sql`, so the schema and the
+queries are shared rather than duplicated.
+
+The connection URL is handed to psycopg verbatim as a libpq conninfo string, so
+options such as ``sslmode`` or ``application_name`` are honoured identically by
+both backends. Pool size comes from ``?pool_min_size=`` / ``?pool_max_size=``.
+
+Pools are shared per URL through :mod:`cachetic.extensions._registry`, and
+released by :func:`cachetic.close_all`.
+
+``value`` is stored as ``TEXT``. That is safe because every value written
+through ``Cachetic`` is a base64 Data URL, hence ASCII.
 """
 
 import logging
@@ -9,72 +21,79 @@ import math
 import time
 import typing
 
-import peewee
+import psycopg_pool
+from psycopg import sql
 
+from cachetic.extensions import _postgres_sql, _registry
 from cachetic.extensions._url import PostgresUrlParts, parse_postgres_url
 from cachetic.types.cache_protocol import CacheProtocol
 from cachetic.utils.hide_url_password import hide_url_password
 
 logger = logging.getLogger(__name__)
 
-_db_registry: dict[str, peewee.PostgresqlDatabase] = {}
-_ensured_tables: set[tuple[str, str]] = set()
+_NAMESPACE = "postgres"
+
+# Marks a pool as opened inside Entry.ensured, alongside the table names.
+_POOL_OPENED = "\0pool-opened"
+
+_Pool = psycopg_pool.ConnectionPool[typing.Any]
 
 
-def _make_cache_model(db: peewee.PostgresqlDatabase, table: str) -> type[peewee.Model]:
-    """Creates a peewee Model class bound to the given database and table."""
-
-    class CacheEntry(peewee.Model):
-        name = peewee.TextField(primary_key=True)
-        value = peewee.TextField()
-        expires_at = peewee.BigIntegerField(null=True)
-
-        class Meta:
-            database = db
-            table_name = table
-
-    return CacheEntry
+def _close(pool: _Pool) -> None:
+    pool.close()
 
 
 class PostgresCache(CacheProtocol):
-    """PostgreSQL cache backend using peewee ORM with psycopg3.
+    """PostgreSQL cache backend using psycopg3's connection pool.
 
     Connection URL: ``postgresql://user:pass@host:5432/db?table=name``
     """
 
-    _db: peewee.PostgresqlDatabase
-    _model: type[peewee.Model]
+    _entry: _registry.EntryHandle
+    _table: str
 
     def __init__(self, cache_url: str) -> None:
         parts: PostgresUrlParts = parse_postgres_url(cache_url)
         safe_url: str = hide_url_password(cache_url)
-        db_url: str = parts.db_url
-        table_name: str = parts.table
 
-        if db_url in _db_registry:
-            db = _db_registry[db_url]
-            logger.debug("Reusing existing Postgres connection for: %s", safe_url)
-        else:
-            db = peewee.PostgresqlDatabase(
-                parts.database,
-                host=parts.host,
-                port=parts.port,
-                user=parts.user,
-                password=parts.password,
-            )
-            _db_registry[db_url] = db
-            logger.debug("Created new Postgres connection for: %s", safe_url)
+        logger.debug("Initializing PostgresCache with URL: %s", safe_url)
 
-        model: type[peewee.Model] = _make_cache_model(db, table_name)
+        self._table = parts.table
+        self._table_ident = sql.Identifier(parts.table)
+        self._entry = _registry.EntryHandle(
+            _NAMESPACE,
+            parts.db_url,
+            # Created closed so that opening — which blocks on a live connection
+            # — happens under the entry's lock in _ready_pool().
+            factory=lambda: psycopg_pool.ConnectionPool(
+                parts.db_url,
+                min_size=parts.pool_min_size,
+                max_size=parts.pool_max_size,
+                open=False,
+            ),
+            close=_close,
+        )
 
-        table_key: tuple[str, str] = (db_url, table_name)
-        if table_key not in _ensured_tables:
-            db.create_tables([model])
-            _ensured_tables.add(table_key)
-            logger.debug("Ensured table '%s' exists", table_name)
+    def _ready_pool(self) -> _Pool:
+        """Returns an open pool whose table exists, doing the setup once."""
+        entry = self._entry()
+        pool: _Pool = entry.client
 
-        self._db = db
-        self._model = model
+        if self._table in entry.ensured:
+            return pool
+
+        with entry.lock:
+            if self._table in entry.ensured:
+                return pool
+            if _POOL_OPENED not in entry.ensured:
+                pool.open(wait=True, timeout=_postgres_sql.DEFAULT_POOL_OPEN_TIMEOUT)
+                entry.ensured.add(_POOL_OPENED)
+            with pool.connection() as conn:
+                conn.execute(_postgres_sql.CREATE_TABLE.format(self._table_ident))
+            entry.ensured.add(self._table)
+            logger.debug("Ensured table '%s' exists", self._table)
+
+        return pool
 
     def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
         """Stores a value with optional TTL (seconds from now).
@@ -83,48 +102,52 @@ class PostgresCache(CacheProtocol):
         entry may outlive its TTL by up to a second. See
         ``CacheticBase._ttl_to_expiry`` for why that is accepted.
         """
+        pool = self._ready_pool()
+
         expires_at: int | None = None
         if ex is not None and ex > 0:
             expires_at = int(time.time()) + math.ceil(ex)
 
-        value_text: str = value.decode("utf-8")
-        (
-            self._model.insert(name=key, value=value_text, expires_at=expires_at)
-            .on_conflict(
-                conflict_target=[self._model.name],
-                update={
-                    self._model.value: value_text,
-                    self._model.expires_at: expires_at,
-                },
-            )
-            .execute()
-        )
+        query = _postgres_sql.UPSERT.format(self._table_ident)
+        with pool.connection() as conn:
+            conn.execute(query, (key, value.decode("utf-8"), expires_at))
+
+    def _fetch(self, key: str) -> tuple[str, int | None] | None:
+        """Returns (value, expires_at) for ``key``, deleting it if expired."""
+        pool = self._ready_pool()
+        select = _postgres_sql.SELECT.format(self._table_ident)
+
+        with pool.connection() as conn:
+            row: tuple[typing.Any, ...] | None = conn.execute(select, (key,)).fetchone()
+
+            if row is None:
+                return None
+
+            value, expires_at = row
+            if expires_at is not None and expires_at < int(time.time()):
+                # Conditional on the deadline just read, so a concurrent set()
+                # that replaced the entry is not clobbered.
+                delete = _postgres_sql.DELETE_EXPIRED.format(self._table_ident)
+                conn.execute(delete, (key, expires_at))
+                return None
+
+            return value, expires_at
 
     def get(self, key: str, /) -> bytes | None:
         """Retrieves a value, returning None if missing or expired."""
-        try:
-            entry: peewee.Model = self._model.get(self._model.name == key)
-        except self._model.DoesNotExist:
+        row = self._fetch(key)
+        if row is None:
             return None
-
-        if entry.expires_at is not None and entry.expires_at < int(time.time()):
-            self._model.delete().where(self._model.name == key).execute()
-            return None
-
-        return typing.cast(str, entry.value).encode("utf-8")
+        return row[0].encode("utf-8")
 
     def delete(self, key: str, /) -> None:
         """Removes a key from the cache."""
-        self._model.delete().where(self._model.name == key).execute()
+        pool = self._ready_pool()
+
+        query = _postgres_sql.DELETE.format(self._table_ident)
+        with pool.connection() as conn:
+            conn.execute(query, (key,))
 
     def exists(self, key: str, /) -> bool:
         """Checks existence, auto-cleaning expired entries."""
-        try:
-            entry: peewee.Model = self._model.get(self._model.name == key)
-        except self._model.DoesNotExist:
-            return False
-
-        if entry.expires_at is not None and entry.expires_at < int(time.time()):
-            self._model.delete().where(self._model.name == key).execute()
-            return False
-        return True
+        return self._fetch(key) is not None

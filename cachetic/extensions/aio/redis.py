@@ -24,10 +24,10 @@ async def _close(client: redis.asyncio.Redis) -> None:  # type: ignore[type-arg]
 class AsyncRedisCacheAdapter(AsyncCacheProtocol):
     """Adapts ``redis.asyncio.Redis`` to the ``AsyncCacheProtocol`` interface."""
 
-    _entry: _registry.Entry
+    _entry: _registry.EntryHandle
 
     def __init__(self, url: str) -> None:
-        self._entry = _registry.acquire(
+        self._entry = _registry.EntryHandle(
             _NAMESPACE,
             url,
             factory=lambda: redis.asyncio.Redis.from_url(url),
@@ -36,7 +36,7 @@ class AsyncRedisCacheAdapter(AsyncCacheProtocol):
 
     @property
     def _client(self) -> "redis.asyncio.Redis":  # type: ignore[type-arg]
-        return self._entry.client
+        return self._entry().client
 
     async def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
         await self._client.set(key, value, ex=ex)

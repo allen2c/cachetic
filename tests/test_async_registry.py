@@ -176,7 +176,39 @@ async def test_same_url_shares_one_client(redis_connection_string: str):
         first_cache = await first.cache()
         second_cache = await second.cache()
 
-        assert first_cache._entry is second_cache._entry
+        assert first_cache._entry() is second_cache._entry()
         assert _registry._registry_size() == 1
     finally:
+        await close_all()
+
+
+async def test_instance_recovers_after_close_all_on_a_live_loop(
+    backend_url: str,
+) -> None:
+    """A client reused after close_all() must reconnect, not fail forever.
+
+    close_all() is documented as loop teardown, but nothing stops it being
+    called while the loop keeps running — a shutdown hook that races a
+    straggler request, or a test that resets between cases. Adapters therefore
+    resolve their registry entry per operation instead of pinning one that
+    close_all() has already closed.
+    """
+    await close_all()
+
+    cache = AsyncCachetic[str](
+        object_type=STR_ADAPTER, cache_url=backend_url, prefix="reopen"
+    )
+    key = unique_key("reopen")
+
+    try:
+        await cache.set(key, "before")
+        assert await cache.get(key) == "before"
+
+        await close_all()
+
+        assert await cache.get(key) == "before"
+        await cache.set(key, "after")
+        assert await cache.get(key) == "after"
+    finally:
+        await cache.delete(key)
         await close_all()

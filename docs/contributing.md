@@ -43,8 +43,11 @@ untouched code. `.flake8` exists only for editors that run flake8.
 |------|--------|
 | `test_async_cache.py` | Every async operation, parametrized over all four backends via the `backend_url` fixture |
 | `test_async_registry.py` | Event-loop affinity — sequential loops, threads with their own loops, `close_all`, dead-loop sweeping |
+| `test_sync_registry.py` | Client sharing, `close_all`, recovery after it, and concurrent construction |
 | `test_version_compat.py` | Reading data written by v0.1.0 onwards |
-| `test_readme_usages.py` | The examples in `README.md`, executed for real |
+| `test_url.py` | Connection-URL parsing, shared by the sync and async adapters |
+| `test_postgres_cache.py` | Schema and connection-option parity between the two PostgreSQL backends, pool sizing, lazy expiry |
+| `test_readme_usages.py` | A hand-kept copy of the `README.md` examples |
 
 The `backend_url` fixture is the way to cover all four backends with one set of
 assertions. Prefer it over writing per-backend tests.
@@ -52,9 +55,10 @@ assertions. Prefer it over writing per-backend tests.
 Keys must be unique per test — backends are shared between tests and between
 runs. `test_async_cache.py` has a `unique_key()` helper.
 
-!!! note "README examples are executed"
-    `test_readme_usages.py` runs the code in `README.md`, so an example that
-    does not work fails the build. Update it alongside the code.
+!!! warning "README examples are copied, not executed"
+    `test_readme_usages.py` does not read `README.md`. It is a hand-kept copy of
+    the examples, so the two drift unless you change them together. Editing a
+    README snippet means editing the matching test.
 
 ## Documentation
 
@@ -67,7 +71,17 @@ make mkdocs           # serve locally
 mkdocs build --strict # what CI-adjacent checks would catch
 ```
 
+## Conventions
+
+- Backend adapters implement the four-method protocol in `cachetic/types/` and
+  use positional-only parameters (`key`, `value`, `ex`).
+- Adapters resolve their shared client through an `EntryHandle` on every
+  operation. Never store the `Entry` — that breaks recovery after `close_all()`.
+- The sync and async registries mirror each other on purpose. A change to one
+  belongs in the other.
+- Connection URLs are parsed in one place, `cachetic/extensions/_url.py`.
+
 ## Before changing behaviour
 
-Read the invariants in [Architecture](architecture.md). Three of them are the
-kind that fail silently rather than loudly.
+Read the invariants in [Architecture](architecture.md). All four are the kind
+that fail silently rather than loudly.

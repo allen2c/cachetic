@@ -17,7 +17,16 @@ Two different locks are used on purpose:
 
 A :class:`weakref.WeakKeyDictionary` keyed by loop would not work here: every
 async client stores a reference back to its loop, so the value keeps the key
-alive and entries are never collected. Dead loops are instead swept explicitly.
+alive and entries are never collected. Dead loops are instead swept explicitly,
+on every :func:`acquire` — which, because adapters resolve through
+:class:`EntryHandle`, means on every cache operation.
+
+Sweeping drops the reference; it cannot close the client. Every close path these
+drivers offer (``Redis.aclose``, ``AsyncMongoClient.close``,
+``AsyncConnectionPool.close``) is a coroutine, and there is no live loop left to
+run it on. Releasing the socket is therefore up to the garbage collector, and
+the sweep cannot happen at all while the process makes no cache calls. Call
+:func:`cachetic.aio.close_all` before a loop exits and none of that applies.
 """
 
 import asyncio
@@ -25,6 +34,10 @@ import dataclasses
 import logging
 import threading
 import typing
+
+from cachetic.extensions._registry import BUSY_REGISTRY_SIZE
+
+__all__ = ["BUSY_REGISTRY_SIZE", "Entry", "EntryHandle", "acquire", "close_all"]
 
 logger = logging.getLogger("cachetic")
 
@@ -46,6 +59,53 @@ class Entry:
 
 _registry: dict[_RegistryKey, Entry] = {}
 _registry_lock = threading.Lock()
+_warned_unclosed = False
+_warned_busy = False
+
+
+def _warn_if_busy_locked() -> None:
+    """Warns once if the registry has grown past what a deployment explains."""
+    global _warned_busy
+    if _warned_busy or len(_registry) <= BUSY_REGISTRY_SIZE:
+        return
+    _warned_busy = True
+    logger.warning(
+        "Cachetic is holding %d shared backend clients. Clients are keyed by "
+        "connection URL and are only evicted when their event loop closes, so a "
+        "URL that varies per request or per tenant will keep opening "
+        "connections. Reuse a fixed set of URLs.",
+        len(_registry),
+    )
+
+
+class EntryHandle:
+    """Resolves an adapter's registry entry on every operation.
+
+    Adapters must not pin an :class:`Entry` at construction time. Doing so
+    outlives the registry: after :func:`close_all` the adapter would keep using
+    a client that has been closed, and every later call on it would fail for as
+    long as the loop stays alive. Re-resolving costs one lock and one dict
+    lookup, and transparently rebuilds the client when it has gone away.
+    """
+
+    def __init__(
+        self,
+        namespace: str,
+        url: str,
+        *,
+        factory: typing.Callable[[], typing.Any],
+        close: CloseFn,
+    ) -> None:
+        self._namespace = namespace
+        self._url = url
+        self._factory = factory
+        self._close = close
+
+    def __call__(self) -> Entry:
+        """Returns the live entry for the running loop, creating it if needed."""
+        return acquire(
+            self._namespace, self._url, factory=self._factory, close=self._close
+        )
 
 
 def _sweep_closed_loops_locked() -> None:
@@ -54,15 +114,31 @@ def _sweep_closed_loops_locked() -> None:
     Their clients cannot be awaited from another loop, so the reference is
     released and the socket is left to the garbage collector. Calling
     :func:`cachetic.aio.close_all` before a loop exits avoids this.
+
+    The first occurrence is reported at WARNING: it means connections were held
+    open past the point the caller could still close them, which is worth
+    surfacing rather than burying in debug output.
     """
+    global _warned_unclosed
     dead: list[_RegistryKey] = [key for key in _registry if key[0].is_closed()]
     for key in dead:
         _registry.pop(key, None)
-        logger.debug(
-            "Dropped %s client for a closed event loop without closing it: %s",
-            key[1],
-            key[2],
-        )
+        if not _warned_unclosed:
+            _warned_unclosed = True
+            logger.warning(
+                "Dropped a %s client whose event loop had already closed (%s) "
+                "without closing it — its connections are left to the garbage "
+                "collector. Await cachetic.aio.close_all() before the loop "
+                "exits to release them deterministically.",
+                key[1],
+                key[2],
+            )
+        else:
+            logger.debug(
+                "Dropped %s client for a closed event loop without closing it: %s",
+                key[1],
+                key[2],
+            )
 
 
 def acquire(
@@ -87,6 +163,7 @@ def acquire(
             entry = Entry(client=factory(), close=close)
             _registry[key] = entry
             logger.debug("Created new %s client for: %s", namespace, url)
+            _warn_if_busy_locked()
         else:
             logger.debug("Reusing existing %s client for: %s", namespace, url)
         return entry

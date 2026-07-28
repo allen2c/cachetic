@@ -22,8 +22,8 @@ Type-safe caching for Python — multiple backends, Pydantic serialization, zero
 pip install cachetic                  # disk backend included
 pip install cachetic[redis]           # + Redis
 pip install cachetic[mongodb]         # + MongoDB
-pip install cachetic[postgres]        # + PostgreSQL (peewee + psycopg3 + pool)
-pip install cachetic zstandard        # + zstd compression
+pip install cachetic[postgres]        # + PostgreSQL
+pip install cachetic[zstd]            # + zstd compression
 ```
 
 ## Quick Start
@@ -80,18 +80,26 @@ cache.
 
 ### Closing connections
 
-Backend clients are shared per (event loop, URL), so closing is process-wide
-rather than per-instance — one instance closing must not break another's client.
-Call `close_all()` before the event loop exits:
+Backend clients are shared per URL — per (event loop, URL) for the async ones —
+so closing is process-wide rather than per-instance: one instance closing must
+not break another's client. Both halves expose the same call:
 
 ```python
-await close_all()
+import cachetic
+from cachetic.aio import close_all as aclose_all
+
+cachetic.close_all()   # sync clients
+await aclose_all()     # async clients, before the event loop exits
 ```
 
-It closes only the clients belonging to the *running* loop. Clients whose loop
-closed without a `close_all()` are dropped on the next use and left to the
-garbage collector; an unclosed PostgreSQL pool in particular holds server
-connections until then.
+Either is safe to call more than once, and a cache used again afterwards
+reconnects rather than failing.
+
+The async one closes only the clients belonging to the *running* loop. Clients
+whose loop closed without a `close_all()` are dropped on the next use and left
+to the garbage collector — every driver's close is a coroutine, and there is no
+live loop left to run it on. An unclosed PostgreSQL pool in particular holds
+server connections until then.
 
 ### Backend notes
 
@@ -99,7 +107,7 @@ connections until then.
 |---------|--------|-------|
 | Redis | `redis.asyncio` | Native async |
 | MongoDB | `pymongo.AsyncMongoClient` | Native async, requires pymongo >= 4.9 |
-| PostgreSQL | `psycopg` + `psycopg_pool` | Native async; the sync client uses peewee, both create the same table |
+| PostgreSQL | `psycopg` + `psycopg_pool` | Both clients pool psycopg3 connections and share one table definition |
 | Disk | `diskcache` | **Thread offload, not true async** — diskcache has no async API, so calls run in a worker thread. Cancelling an operation returns immediately but the thread still finishes the write |
 
 ## Backends
@@ -139,8 +147,27 @@ cache = Cachetic[Person](
 )
 ```
 
+The table name and the connection-pool size come from the URL. Everything else in
+it — `sslmode`, `application_name`, … — is handed to psycopg untouched, and the
+sync and async clients read all of it identically.
+
+| Parameter         | Default          | Description                          |
+|-------------------|------------------|--------------------------------------|
+| `table`           | `cachetic_cache` | Table holding the cache entries      |
+| `pool_min_size`   | `1`              | Connections kept open per process    |
+| `pool_max_size`   | `8`              | Ceiling on concurrent connections    |
+
+```python
+cache_url="postgresql://user:pass@host/mydb?table=cache&pool_min_size=2&pool_max_size=20"
+```
+
+One warm connection is the default because a cache is optional infrastructure and
+its cost multiplies across every process in a deployment. Raise `pool_min_size` if
+the cache is on a hot path.
+
 > All four backends share connections automatically — multiple `Cachetic` instances with
 > the same URL reuse a single underlying client and skip redundant DDL / index creation.
+> Release them with `cachetic.close_all()`.
 
 ## Compression
 
@@ -152,11 +179,16 @@ cache = Cachetic[Person](
 )
 ```
 
-- **zstd** (preferred) — install `zstandard`
+- **zstd** (preferred) — `pip install cachetic[zstd]`
 - **zlib** (fallback) — Python standard library
 
-Readers auto-detect compressed data regardless of their own `compression` setting, so
-you can freely mix compressed and uncompressed writers.
+Values record which algorithm they used, so readers auto-detect compressed data
+regardless of their own `compression` setting and you can freely mix compressed and
+uncompressed writers.
+
+Install the `zstd` extra on every process that shares a cache, or on none of them: a
+writer that has `zstandard` prefers it, and a reader without the library cannot
+decompress what that writer produced.
 
 ## Configuration
 
@@ -202,8 +234,8 @@ export CACHETIC_COMPRESSION=true
 | `delete(key)`                 | `None`        | Remove a key                           |
 | `exists(key)`                 | `bool`        | Check if a key exists                  |
 
-`AsyncCachetic` exposes the same five methods as coroutines, plus the
-module-level `cachetic.aio.close_all()`.
+`AsyncCachetic` exposes the same five methods as coroutines. Each half also has a
+module-level teardown: `cachetic.close_all()` and `cachetic.aio.close_all()`.
 
 ```python
 from cachetic import CacheNotFoundError
@@ -213,8 +245,6 @@ cache.get_or_raise("missing")          # raises CacheNotFoundError
 ```
 
 ## Upgrading to v0.7.0
-
-Two breaking changes:
 
 **1. Environment variables now require the `CACHETIC_` prefix.** Earlier versions
 had no prefix configured, so the bare names below were read from the environment
@@ -242,7 +272,25 @@ mongo_cache.set(name="key", value=b"...")
 mongo_cache.set("key", b"...")
 ```
 
-Stored data is unaffected — v0.7.0 reads everything written by earlier versions.
+**3. zstd compression is now an extra.** `pip install cachetic[zstd]` instead of
+`pip install zstandard`. Every process sharing a cache must agree on it — a
+writer that has the library prefers zstd, and a reader without it cannot
+decompress the result.
+
+**4. The PostgreSQL backend no longer uses peewee.** Both clients talk to psycopg
+directly, so `pip install cachetic[postgres]` no longer pulls in an ORM, the
+whole connection URL reaches psycopg (`sslmode` and friends now work on the sync
+client too), and the pool keeps **one** connection warm instead of four. Raise it
+with `?pool_min_size=`.
+
+### Stored data
+
+v0.7.0 reads everything written by earlier versions, with one exception: a cache
+whose `object_type` is `bytes` and whose data was written by v0.5.x/v0.6.x with
+`compression=True` must keep `compression=True` to read it. Those values carry no
+algorithm marker and any byte string is a valid `bytes`, so there is nothing to
+detect. Values written from v0.7.0 on say which algorithm they used and read back
+under either setting.
 
 ## License
 

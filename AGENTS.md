@@ -1,39 +1,30 @@
 # AGENTS.md
 
-Type-safe caching library. Sync (`Cachetic`) and async (`AsyncCachetic`) clients
-over four backends: disk, Redis, MongoDB, PostgreSQL.
+Type-safe caching library. `Cachetic` and `AsyncCachetic` over four backends:
+disk, Redis, MongoDB, PostgreSQL.
 
-## Read first
+## Where to look
 
 | Question | Go to |
 |----------|-------|
+| What does the public API do? | [`README.md`](README.md) |
 | How is this put together? What must not break? | [`docs/architecture.md`](docs/architecture.md) |
 | How do I run tests, services, lint, docs? | [`docs/contributing.md`](docs/contributing.md) |
-| What does the public API do? | [`README.md`](README.md) |
 
-## Minimum you need to know
+Read `docs/architecture.md` before touching `_base.py`, `extensions/_url.py`,
+either registry, or either PostgreSQL backend. Its **Invariants** section lists
+what fails silently and which test pins it.
 
-**Backend tests skip silently without services.** `make test` passing does not
-mean the backends were exercised. Run `make services-up` first, or `make test-all`.
+## Before you trust a green test run
 
-**`cachetic/_base.py` is shared by both clients.** It holds all serialisation and
-has no I/O. Changing it changes the storage format for sync *and* async at once.
+`make test` passing does not mean the backends were exercised — they skip
+silently when the services are down. Run `make services-up` first, or
+`make test-all`.
 
-**Four invariants fail silently, not loudly** — one value format across both
-clients, old data stays readable, sync/async PostgreSQL DDL match, URL parsing
-shared. They are listed with their pinning tests in
-[`docs/architecture.md`](docs/architecture.md#invariants). Read that section
-before touching `_base.py`, `extensions/_url.py`, or either PostgreSQL backend.
+## Two things that are easy to get wrong
 
-**`README.md` and `docs/index.md` are the same content twice**, in Markdown and
-mkdocs-material formats. Update both. `tests/test_readme_usages.py` executes the
-README examples, so a broken example fails the build.
+- **`README.md` and `docs/index.md` are the same content twice.** Update both.
+- **The sync and async halves mirror each other on purpose.** A change to one
+  belongs in the other.
 
-## Conventions
-
-- `ruff` is the linter of record; its rules are pinned in `pyproject.toml`.
-  `.flake8` exists only for editors. Run `make fmt` before committing.
-- Backend adapters implement a four-method protocol and use positional-only
-  parameters (`key`, `value`, `ex`), matching `cachetic/types/`.
-- Add backend coverage through the `backend_url` fixture rather than writing a
-  test per backend.
+Run `make fmt` before committing.

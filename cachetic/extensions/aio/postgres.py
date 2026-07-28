@@ -1,13 +1,14 @@
 """Async PostgreSQL adapter for AsyncCacheProtocol.
 
-peewee has no async support, so this backend talks to psycopg3 directly through
-an ``AsyncConnectionPool``. The table definition below is byte-for-byte what
-peewee emits for the sync backend's model — both sides use
-``CREATE TABLE IF NOT EXISTS``, so whichever connects first defines the table and
-a mismatch would silently diverge rather than raise.
+Talks to psycopg3 through an ``AsyncConnectionPool``. The schema and every
+statement come from :mod:`cachetic.extensions._postgres_sql`, shared with the
+sync backend, so the two cannot drift apart.
 
-``value`` is stored as ``TEXT`` to match the sync backend. That is safe because
-every value written through ``Cachetic`` is a base64 Data URL, hence ASCII.
+Pool size comes from the URL's ``?pool_min_size=`` / ``?pool_max_size=``, the
+same parameters the sync backend reads.
+
+``value`` is stored as ``TEXT``. That is safe because every value written
+through ``Cachetic`` is a base64 Data URL, hence ASCII.
 """
 
 import logging
@@ -19,6 +20,7 @@ import psycopg
 import psycopg_pool
 from psycopg import sql
 
+from cachetic.extensions import _postgres_sql
 from cachetic.extensions._url import PostgresUrlParts, parse_postgres_url
 from cachetic.extensions.aio import _registry
 from cachetic.types.async_cache_protocol import AsyncCacheProtocol
@@ -31,20 +33,10 @@ _NAMESPACE = "postgres"
 # Marks a pool as opened inside Entry.ensured, alongside the table names.
 _POOL_OPENED = "\0pool-opened"
 
-# psycopg_pool retries failed connections forever in the background. Without a
-# bounded wait, a wrong password or unreachable host hangs the first operation
-# instead of raising, so opening waits for one live connection and gives up.
-_POOL_OPEN_TIMEOUT: float = 30.0
-
-# Must stay identical to what peewee generates in cachetic/extensions/postgres.py.
-# tests/test_postgres_cache.py compares both against information_schema.
-_CREATE_TABLE_SQL = (
-    'CREATE TABLE IF NOT EXISTS {} ("name" TEXT NOT NULL PRIMARY KEY, '
-    '"value" TEXT NOT NULL, "expires_at" BIGINT)'
-)
+_Pool = psycopg_pool.AsyncConnectionPool[typing.Any]
 
 
-async def _close(pool: psycopg_pool.AsyncConnectionPool) -> None:
+async def _close(pool: _Pool) -> None:
     await pool.close()
 
 
@@ -54,8 +46,6 @@ class AsyncPostgresCache(AsyncCacheProtocol):
     Connection URL: ``postgresql://user:pass@host:5432/db?table=name``
     """
 
-    _entry: _registry.Entry
-
     def __init__(self, cache_url: str) -> None:
         parts: PostgresUrlParts = parse_postgres_url(cache_url)
         safe_url: str = hide_url_password(cache_url)
@@ -64,35 +54,43 @@ class AsyncPostgresCache(AsyncCacheProtocol):
 
         self._table = parts.table
         self._table_ident = sql.Identifier(parts.table)
-        self._entry = _registry.acquire(
+        self._entry = _registry.EntryHandle(
             _NAMESPACE,
             parts.db_url,
             # The pool is created closed: opening it is awaitable and happens in
-            # _ensure_table(), under the entry's asyncio lock.
-            factory=lambda: psycopg_pool.AsyncConnectionPool(parts.db_url, open=False),
+            # _ready_pool(), under the entry's asyncio lock.
+            factory=lambda: psycopg_pool.AsyncConnectionPool(
+                parts.db_url,
+                min_size=parts.pool_min_size,
+                max_size=parts.pool_max_size,
+                open=False,
+            ),
             close=_close,
         )
 
-    @property
-    def _pool(self) -> psycopg_pool.AsyncConnectionPool:
-        return self._entry.client
+    async def _ready_pool(self) -> _Pool:
+        """Returns an open pool whose table exists, doing the setup once."""
+        entry = self._entry()
+        pool: _Pool = entry.client
 
-    async def _ensure_table(self) -> None:
-        """Opens the pool and creates the table, once per client and table."""
-        if self._table in self._entry.ensured:
-            return
+        if self._table in entry.ensured:
+            return pool
 
-        async with self._entry.lock:
-            if self._table in self._entry.ensured:
-                return
-            if _POOL_OPENED not in self._entry.ensured:
+        async with entry.lock:
+            if self._table in entry.ensured:
+                return pool
+            if _POOL_OPENED not in entry.ensured:
                 # Opening is awaitable, which is why the pool is created closed.
-                await self._pool.open(wait=True, timeout=_POOL_OPEN_TIMEOUT)
-                self._entry.ensured.add(_POOL_OPENED)
-            async with self._pool.connection() as conn:
-                await conn.execute(sql.SQL(_CREATE_TABLE_SQL).format(self._table_ident))
-            self._entry.ensured.add(self._table)
+                await pool.open(
+                    wait=True, timeout=_postgres_sql.DEFAULT_POOL_OPEN_TIMEOUT
+                )
+                entry.ensured.add(_POOL_OPENED)
+            async with pool.connection() as conn:
+                await conn.execute(_postgres_sql.CREATE_TABLE.format(self._table_ident))
+            entry.ensured.add(self._table)
             logger.debug("Ensured table '%s' exists", self._table)
+
+        return pool
 
     async def set(self, key: str, value: bytes, ex: int | None = None, /) -> None:
         """Stores a value with optional TTL (seconds from now).
@@ -100,28 +98,22 @@ class AsyncPostgresCache(AsyncCacheProtocol):
         Deadline granularity matches the sync backend exactly, including its
         up-to-one-second lateness. See ``CacheticBase._ttl_to_expiry``.
         """
-        await self._ensure_table()
+        pool = await self._ready_pool()
 
         expires_at: int | None = None
         if ex is not None and ex > 0:
             expires_at = int(time.time()) + math.ceil(ex)
 
-        query = sql.SQL(
-            "INSERT INTO {} (name, value, expires_at) VALUES (%s, %s, %s) "
-            "ON CONFLICT (name) DO UPDATE "
-            "SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at"
-        ).format(self._table_ident)
-
-        async with self._pool.connection() as conn:
+        query = _postgres_sql.UPSERT.format(self._table_ident)
+        async with pool.connection() as conn:
             await conn.execute(query, (key, value.decode("utf-8"), expires_at))
 
     async def _fetch(self, key: str) -> tuple[str, int | None] | None:
         """Returns (value, expires_at) for ``key``, deleting it if expired."""
-        select = sql.SQL("SELECT value, expires_at FROM {} WHERE name = %s").format(
-            self._table_ident
-        )
+        pool = await self._ready_pool()
+        select = _postgres_sql.SELECT.format(self._table_ident)
 
-        async with self._pool.connection() as conn:
+        async with pool.connection() as conn:
             cursor: psycopg.AsyncCursor = await conn.execute(select, (key,))
             row: tuple[typing.Any, ...] | None = await cursor.fetchone()
 
@@ -130,18 +122,16 @@ class AsyncPostgresCache(AsyncCacheProtocol):
 
             value, expires_at = row
             if expires_at is not None and expires_at < int(time.time()):
-                delete = sql.SQL("DELETE FROM {} WHERE name = %s").format(
-                    self._table_ident
-                )
-                await conn.execute(delete, (key,))
+                # Conditional on the deadline just read, so a concurrent set()
+                # that replaced the entry is not clobbered.
+                delete = _postgres_sql.DELETE_EXPIRED.format(self._table_ident)
+                await conn.execute(delete, (key, expires_at))
                 return None
 
             return value, expires_at
 
     async def get(self, key: str, /) -> bytes | None:
         """Retrieves a value, returning None if missing or expired."""
-        await self._ensure_table()
-
         row = await self._fetch(key)
         if row is None:
             return None
@@ -149,14 +139,12 @@ class AsyncPostgresCache(AsyncCacheProtocol):
 
     async def delete(self, key: str, /) -> None:
         """Removes a key from the cache."""
-        await self._ensure_table()
+        pool = await self._ready_pool()
 
-        query = sql.SQL("DELETE FROM {} WHERE name = %s").format(self._table_ident)
-        async with self._pool.connection() as conn:
+        query = _postgres_sql.DELETE.format(self._table_ident)
+        async with pool.connection() as conn:
             await conn.execute(query, (key,))
 
     async def exists(self, key: str, /) -> bool:
         """Checks existence, auto-cleaning expired entries."""
-        await self._ensure_table()
-
         return await self._fetch(key) is not None

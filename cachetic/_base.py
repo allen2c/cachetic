@@ -58,13 +58,15 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
     compression: bool = pydantic.Field(
         default=False,
         description=(
-            "Enable compression for cached values. "
-            "When enabled, values are compressed before storage and decompressed on retrieval. "  # noqa: E501
-            "Automatic decompression occurs during validation errors if compressed data is detected."  # noqa: E501
+            "Compress values before storing them. "
+            "Values written from version 0.7.0 on record the algorithm they used, "
+            "so reads decompress correctly whatever this flag is set to. "
+            "It only decides what new writes do."
         ),
     )
 
     _is_bytes_type: bool = pydantic.PrivateAttr(default=False)
+    _durl_prefixes: tuple[bytes, ...] = pydantic.PrivateAttr(default=())
 
     @pydantic.model_validator(mode="after")
     def validate_after_init(self) -> typing.Self:
@@ -73,6 +75,7 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         self._is_bytes_type = inspect.isclass(self.object_type._type) and issubclass(
             self.object_type._type, bytes
         )
+        self._durl_prefixes = _durl_prefixes_for(self._is_bytes_type)
         return self
 
     @property
@@ -125,13 +128,28 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         1. Data URL (v0.7.0+): b"data:..." — parse DURL, extract payload
         2. Compressed legacy (v0.5.0+): zstd/zlib magic bytes — decompress
         3. Raw bytes legacy (v0.1.0+): plain JSON bytes or raw bytes
-        """
-        if data is None:
-            raise ValueError("Input data must not be None")
 
+        Detection is deliberately narrow. A ``bytes`` cache stores its payload
+        verbatim, so a value written before 0.7.0 can itself start with
+        ``data:`` — a cached data URI is an obvious way to end up there. Only the
+        exact headers :meth:`_dump_any` emits count as the new format, and even
+        then a parse failure falls back to the legacy path rather than surfacing
+        as a base64 error on data that was never base64.
+        """
         # Path 1: Data URL format (v0.7.0+)
-        if data.startswith(b"data:"):
-            return self._loads_durl(data)
+        if data.startswith(self._durl_prefixes):
+            try:
+                return self._loads_durl(data)
+            except ValueError as durl_error:
+                logger.debug(
+                    "Value looks like a Cachetic Data URL but did not parse, "
+                    "falling back to the pre-0.7.0 format. Error: %s",
+                    durl_error,
+                )
+                try:
+                    return self._loads_legacy(data)
+                except Exception:
+                    raise durl_error from None
 
         # Path 2 & 3: Legacy formats (compressed or raw)
         return self._loads_legacy(data)
@@ -152,7 +170,15 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         return self._validate_any(payload)
 
     def _loads_legacy(self, data: bytes) -> T:
-        """Handles legacy formats: compressed bytes or raw JSON/bytes."""
+        """Handles legacy formats: compressed bytes or raw JSON/bytes.
+
+        The "retry after decompressing" recovery below keys off a validation
+        error, so it cannot help a ``bytes`` cache: every byte string is a valid
+        ``bytes``, compressed or not. Reading pre-0.7.0 ``bytes`` data therefore
+        requires ``compression`` to be set the way it was when that data was
+        written. Values written from 0.7.0 on are self-describing and have no
+        such requirement.
+        """
         from cachetic.utils.compression import decompress_auto, might_compressed
 
         if self.compression:
@@ -182,17 +208,17 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         """
         from durl import DURL
 
+        mime_type: str = _mime_for(self._is_bytes_type)
         if self._is_bytes_type:
-            mime_type: str = "application/octet-stream"
             data_bytes: bytes = typing.cast(
                 bytes, self.object_type.validate_python(value)
             )
         else:
-            mime_type = "application/json"
             data_bytes = self.object_type.dump_json(value)
 
         parameters: dict[str, str] = {}
-        if self.compression:
+        # An empty payload compresses to itself, with no magic bytes to name.
+        if self.compression and data_bytes:
             from cachetic.utils.compression import compress_auto
 
             data_bytes = compress_auto(data_bytes)
@@ -206,13 +232,44 @@ class CacheticBase(pydantic_settings.BaseSettings, typing.Generic[T]):
         return str(durl).encode("utf-8")
 
 
+_MIME_BYTES = "application/octet-stream"
+_MIME_JSON = "application/json"
+
+_ZSTD = "zstd"
+_ZLIB = "zlib"
+_COMPRESSION_NAMES = (_ZSTD, _ZLIB)
+
+
+def _mime_for(is_bytes_type: bool) -> str:
+    """Returns the MIME type :meth:`CacheticBase._dump_any` writes."""
+    return _MIME_BYTES if is_bytes_type else _MIME_JSON
+
+
+def _durl_prefixes_for(is_bytes_type: bool) -> tuple[bytes, ...]:
+    """Returns every Data URL header this library can emit for a value type.
+
+    Used to recognise Cachetic's own format without claiming unrelated data
+    URIs that a pre-0.7.0 ``bytes`` cache may have stored verbatim, so it has to
+    stay exhaustive: a header :meth:`CacheticBase._dump_any` can write but this
+    does not list reads back as legacy data and fails to validate.
+    """
+    mime: str = _mime_for(is_bytes_type)
+    headers: list[str] = [f"data:{mime};base64,"]
+    headers += [
+        f"data:{mime};compression={name};base64," for name in _COMPRESSION_NAMES
+    ]
+    return tuple(header.encode("utf-8") for header in headers)
+
+
 def _detect_compression_name(data: bytes) -> str:
-    """Returns compression algorithm name by inspecting magic bytes."""
+    """Returns compression algorithm name by inspecting magic bytes.
+
+    The result is written into the Data URL, so it must stay within
+    ``_COMPRESSION_NAMES`` — those are the headers the reader recognises.
+    """
     from cachetic.utils.compression import ZSTD_MAGIC
 
-    if data.startswith(ZSTD_MAGIC):
-        return "zstd"
-    return "zlib"
+    return _ZSTD if data.startswith(ZSTD_MAGIC) else _ZLIB
 
 
 def _validate_ttl_value(ttl: int) -> int:
